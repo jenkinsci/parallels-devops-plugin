@@ -1,7 +1,10 @@
 package com.parallels.jenkins.api;
 
+import com.parallels.jenkins.api.dto.CatalogManifest;
 import com.parallels.jenkins.api.dto.CloneRequest;
 import com.parallels.jenkins.api.dto.CloneResponse;
+import com.parallels.jenkins.api.dto.CreateVmRequest;
+import com.parallels.jenkins.api.dto.CreateVmResponse;
 import com.parallels.jenkins.api.dto.VmStatusResponse;
 import com.parallels.jenkins.api.exception.PrlApiException;
 import com.parallels.jenkins.api.exception.PrlApiTimeoutException;
@@ -134,6 +137,86 @@ class PrlDevopsHttpClientTest {
     }
 
     // -------------------------------------------------------------------------
+    // startVm
+    // -------------------------------------------------------------------------
+
+    @Test
+    void startVm_hostMode_sendsCorrectGetRequest() throws Exception {
+        server.enqueue(new MockResponse().setResponseCode(200));
+
+        assertDoesNotThrow(() -> hostClient.startVm(VM_ID));
+
+        RecordedRequest req = server.takeRequest();
+        assertEquals("GET", req.getMethod());
+        assertEquals("/api/v1/machines/" + VM_ID + "/start", req.getPath());
+        assertEquals("Bearer " + TOKEN, req.getHeader("Authorization"));
+    }
+
+    @Test
+    void startVm_orchestratorMode_usesOrchestratorPath() throws Exception {
+        server.enqueue(new MockResponse().setResponseCode(200));
+
+        orchClient.startVm(VM_ID);
+
+        RecordedRequest req = server.takeRequest();
+        assertEquals("GET", req.getMethod());
+        assertEquals(
+                "/api/v1/orchestrator/hosts/" + HOST_ID + "/machines/" + VM_ID + "/start",
+                req.getPath());
+    }
+
+    // -------------------------------------------------------------------------
+    // createVmFromCatalog
+    // -------------------------------------------------------------------------
+
+    @Test
+    void createVmFromCatalog_sendsPostToMachinesEndpoint() throws Exception {
+        String responseBody = "{\"id\":\"" + VM_ID + "\",\"name\":\"test-vm\","
+                + "\"owner\":\"user\",\"current_state\":\"stopped\"}";
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody(responseBody));
+
+        CatalogManifest manifest = new CatalogManifest(
+                "EMPTY-VM", "latest", "host=user:pass@https://catalog.example.com");
+        CreateVmRequest request = new CreateVmRequest("test-vm", "arm64", manifest);
+        CreateVmResponse response = hostClient.createVmFromCatalog(request);
+
+        assertEquals(VM_ID, response.getId());
+        assertEquals("stopped", response.getCurrentState());
+
+        RecordedRequest req = server.takeRequest();
+        assertEquals("POST", req.getMethod());
+        assertEquals("/api/v1/machines", req.getPath());
+        assertEquals("Bearer " + TOKEN, req.getHeader("Authorization"));
+        String body = req.getBody().readUtf8();
+        assertTrue(body.contains("\"startOnCreate\":true"));
+        assertTrue(body.contains("\"architecture\":\"arm64\""));
+        assertTrue(body.contains("\"catalog_id\":\"EMPTY-VM\""));
+    }
+
+    @Test
+    void createVmFromCatalog_usesRootPathEvenInOrchestratorMode() throws Exception {
+        // catalog creation always uses /api/v1/machines, not the orchestrator path
+        String responseBody = "{\"id\":\"" + VM_ID + "\",\"name\":\"test-vm\","
+                + "\"owner\":\"user\",\"current_state\":\"stopped\"}";
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody(responseBody));
+
+        CatalogManifest manifest = new CatalogManifest(
+                "EMPTY-VM", "latest", "host=user:pass@https://catalog.example.com");
+        CreateVmRequest request = new CreateVmRequest("test-vm", "arm64", manifest);
+        orchClient.createVmFromCatalog(request);
+
+        RecordedRequest req = server.takeRequest();
+        assertEquals("POST", req.getMethod());
+        assertEquals("/api/v1/machines", req.getPath());
+    }
+
+    // -------------------------------------------------------------------------
     // deleteVm
     // -------------------------------------------------------------------------
 
@@ -145,7 +228,7 @@ class PrlDevopsHttpClientTest {
 
         RecordedRequest req = server.takeRequest();
         assertEquals("DELETE", req.getMethod());
-        assertEquals("/api/v1/machines/" + VM_ID, req.getPath());
+        assertEquals("/api/v1/machines/" + VM_ID + "?force=true", req.getPath());
         assertEquals("Bearer " + TOKEN, req.getHeader("Authorization"));
     }
 
@@ -158,7 +241,7 @@ class PrlDevopsHttpClientTest {
         RecordedRequest req = server.takeRequest();
         assertEquals("DELETE", req.getMethod());
         assertEquals(
-                "/api/v1/orchestrator/hosts/" + HOST_ID + "/machines/" + VM_ID,
+                "/api/v1/orchestrator/hosts/" + HOST_ID + "/machines/" + VM_ID + "?force=true",
                 req.getPath());
     }
 
@@ -210,30 +293,111 @@ class PrlDevopsHttpClientTest {
         server.enqueue(new MockResponse()
                 .setResponseCode(200)
                 .setHeader("Content-Type", "application/json")
-                .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"running\"}"));
+                .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"running\",\"ip_configured\":\"10.211.55.3\"}"));
+        // execute probe
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"stdout\":\"prl-ready\",\"exit_code\":0}"));
 
-        VmStatusResponse result = hostClient.waitForVmReady(VM_ID, Duration.ofSeconds(5), Duration.ofMillis(50));
+        VmStatusResponse result = hostClient.waitForVmReady(VM_ID, "parallels", Duration.ofSeconds(5), Duration.ofMillis(50));
 
         assertEquals("running", result.getStatus());
-        assertEquals(1, server.getRequestCount());
+        assertEquals("10.211.55.3", result.getIpConfigured());
+        assertEquals(2, server.getRequestCount());
     }
 
     @Test
     void waitForVmReady_pollsUntilRunning() throws Exception {
+        // pending → starting → running: should return on first successful execute probe
         server.enqueue(new MockResponse()
                 .setResponseCode(200)
                 .setHeader("Content-Type", "application/json")
-                .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"pending\"}"));
+                .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"pending\",\"ip_configured\":\"-\"}"));
         server.enqueue(new MockResponse()
                 .setResponseCode(200)
                 .setHeader("Content-Type", "application/json")
-                .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"starting\"}"));
+                .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"starting\",\"ip_configured\":\"-\"}"));
         server.enqueue(new MockResponse()
                 .setResponseCode(200)
                 .setHeader("Content-Type", "application/json")
-                .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"running\"}"));
+                .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"running\",\"ip_configured\":\"10.211.55.3\"}"));
+        // execute probe
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"stdout\":\"prl-ready\",\"exit_code\":0}"));
 
-        VmStatusResponse result = hostClient.waitForVmReady(VM_ID, Duration.ofSeconds(10), Duration.ofMillis(50));
+        VmStatusResponse result = hostClient.waitForVmReady(VM_ID, "parallels", Duration.ofSeconds(10), Duration.ofMillis(50));
+
+        assertEquals("running", result.getStatus());
+        assertEquals(4, server.getRequestCount());
+    }
+
+    @Test
+    void waitForVmReady_executeProbe_retriesUntilSuccess() throws Exception {
+        // running with valid IP but execute probe fails once before succeeding.
+        // The inner loop re-fetches status after each failed attempt, so we need
+        // 4 responses: status → execute(fail) → status-refetch → execute(success).
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"running\",\"ip_configured\":\"10.211.55.3\"}"));
+        // first execute probe: guest agent not ready yet (500)
+        server.enqueue(new MockResponse().setResponseCode(500).setBody("{}"));
+        // status re-fetch inside inner loop
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"running\",\"ip_configured\":\"10.211.55.3\"}"));
+        // second execute probe: success
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"stdout\":\"prl-ready\",\"exit_code\":0}"));
+
+        VmStatusResponse result = hostClient.waitForVmReady(VM_ID, "parallels", Duration.ofSeconds(5), Duration.ofMillis(50));
+
+        assertEquals("running", result.getStatus());
+        assertEquals(4, server.getRequestCount());
+    }
+
+    @Test
+    void waitForVmReady_runningWithValidIp_returnsAfterExecuteProbe() throws Exception {
+        // running with a valid IP — should proceed to execute probe and return
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"running\",\"ip_configured\":\"10.211.55.5\"}"));
+        // execute probe
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"stdout\":\"prl-ready\",\"exit_code\":0}"));
+
+        VmStatusResponse result = hostClient.waitForVmReady(VM_ID, "parallels", Duration.ofSeconds(5), Duration.ofMillis(50));
+
+        assertEquals("running", result.getStatus());
+        assertEquals(2, server.getRequestCount());
+    }
+
+    @Test
+    void waitForVmReady_suspendedState_keepsPolling() throws Exception {
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"suspended\",\"ip_configured\":\"-\"}"));
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"running\",\"ip_configured\":\"10.211.55.3\"}"));
+        // execute probe
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"stdout\":\"prl-ready\",\"exit_code\":0}"));
+
+        VmStatusResponse result = hostClient.waitForVmReady(VM_ID, "parallels", Duration.ofSeconds(5), Duration.ofMillis(50));
 
         assertEquals("running", result.getStatus());
         assertEquals(3, server.getRequestCount());
@@ -247,7 +411,7 @@ class PrlDevopsHttpClientTest {
                 .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"error\"}"));
 
         assertThrows(PrlApiException.class,
-                () -> hostClient.waitForVmReady(VM_ID, Duration.ofSeconds(5), Duration.ofMillis(50)));
+                () -> hostClient.waitForVmReady(VM_ID, "parallels", Duration.ofSeconds(5), Duration.ofMillis(50)));
     }
 
     @Test
@@ -261,7 +425,7 @@ class PrlDevopsHttpClientTest {
         }
 
         PrlApiTimeoutException ex = assertThrows(PrlApiTimeoutException.class,
-                () -> hostClient.waitForVmReady(VM_ID, Duration.ofMillis(200), Duration.ofMillis(50)));
+                () -> hostClient.waitForVmReady(VM_ID, "parallels", Duration.ofMillis(200), Duration.ofMillis(50)));
 
         assertEquals(VM_ID, ex.getVmId());
     }
@@ -271,9 +435,14 @@ class PrlDevopsHttpClientTest {
         server.enqueue(new MockResponse()
                 .setResponseCode(200)
                 .setHeader("Content-Type", "application/json")
-                .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"Running\"}"));
+                .setBody("{\"id\":\"" + VM_ID + "\",\"status\":\"Running\",\"ip_configured\":\"10.211.55.3\"}"));
+        // execute probe
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"stdout\":\"prl-ready\",\"exit_code\":0}"));
 
-        VmStatusResponse result = hostClient.waitForVmReady(VM_ID, Duration.ofSeconds(5), Duration.ofMillis(50));
+        VmStatusResponse result = hostClient.waitForVmReady(VM_ID, "parallels", Duration.ofSeconds(5), Duration.ofMillis(50));
 
         assertEquals("Running", result.getStatus());
     }

@@ -14,7 +14,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * }
  * </pre>
  *
- * Known {@code status} values: {@code pending}, {@code starting}, {@code running}, {@code error}.
+ * Known {@code status} values: {@code pending}, {@code starting}, {@code running}, {@code suspended}, {@code error}.
+ * The VM is SSH-ready only when {@code status} is {@code running} AND {@code ip_configured} is not {@code "-"}.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class VmStatusResponse {

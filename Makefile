@@ -24,8 +24,9 @@ test:
 # Boot the local Jenkins development server
 # Override port:    make run JENKINS_PORT=9090
 # Override version: make run JENKINS_VERSION=2.479.1
+# Binds to 0.0.0.0 so VMs on the local network can reach Jenkins at the Mac's LAN IP.
 run:
-	mvn hpi:run -DskipTests -Dport=$(JENKINS_PORT) $(_VERSION_ARG)
+	mvn hpi:run -DskipTests -Dport=$(JENKINS_PORT) -Dhpi.host=0.0.0.0 $(_VERSION_ARG)
 
 # Package the final .hpi file under target/
 package:

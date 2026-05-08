@@ -38,9 +38,7 @@ public class PrlDevopsCloudTest {
     public void testAgentTemplateRoundTrip() throws Exception {
         AgentTemplate template = new AgentTemplate(
                 "macos-sonoma",
-                "macOS-Sonoma-base",
-                "ssh-cred-id",
-                "/Users/parallels/jenkins-agent"
+                "macOS-Sonoma-base"
         );
         template.setNumExecutors(2);
 
@@ -58,8 +56,6 @@ public class PrlDevopsCloudTest {
         AgentTemplate loaded_t = loaded.getTemplates().get(0);
         assertEquals("macos-sonoma", loaded_t.getTemplateLabel());
         assertEquals("macOS-Sonoma-base", loaded_t.getBaseVmName());
-        assertEquals("ssh-cred-id", loaded_t.getSshCredentialsId());
-        assertEquals("/Users/parallels/jenkins-agent", loaded_t.getRemoteFs());
         assertEquals(2, loaded_t.getNumExecutors());
     }
 
@@ -67,9 +63,7 @@ public class PrlDevopsCloudTest {
     public void testAgentTemplateMatchesLabel() {
         AgentTemplate template = new AgentTemplate(
                 "macos-sonoma",
-                "macOS-Sonoma-base",
-                "ssh-cred-id",
-                "/Users/parallels/jenkins-agent"
+                "macOS-Sonoma-base"
         );
 
         assertTrue(template.matches(null));
@@ -79,10 +73,8 @@ public class PrlDevopsCloudTest {
 
     @Test
     public void testGetTemplateForLabel() {
-        AgentTemplate macTemplate = new AgentTemplate(
-                "macos-sonoma", "macOS-Sonoma-base", "ssh-cred-id", "/Users/parallels/jenkins-agent");
-        AgentTemplate linuxTemplate = new AgentTemplate(
-                "ubuntu-22", "Ubuntu-22-base", "ssh-cred-id", "/home/jenkins/agent");
+        AgentTemplate macTemplate = new AgentTemplate("macos-sonoma", "macOS-Sonoma-base");
+        AgentTemplate linuxTemplate = new AgentTemplate("ubuntu-22", "Ubuntu-22-base");
 
         PrlDevopsCloud cloud = new PrlDevopsCloud("LabelCloud");
         java.util.List<AgentTemplate> templates = new java.util.ArrayList<>();

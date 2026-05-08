@@ -42,6 +42,8 @@
         <!-- SpotBugs: increase analysis depth (parent POM already runs spotbugs during verify) -->
         <spotbugs.effort>Max</spotbugs.effort>
         <spotbugs.threshold>Low</spotbugs.threshold>
+        <!-- Explicitly declare Jackson as bundled inside the .hpi (not provided by Jenkins core) -->
+        <hpi.bundledArtifacts>jackson-annotations,jackson-core,jackson-databind</hpi.bundledArtifacts>
     </properties>
 
     <dependencyManagement>
@@ -65,12 +67,13 @@
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>plain-credentials</artifactId>
         </dependency>
-        <!-- Jackson is shipped by Jenkins core; declare as provided to avoid classloader conflicts -->
+        <!-- Jackson must be bundled in the .hpi — Jenkins core uses it internally but does
+             not expose it to plugin classloaders, so 'provided' causes NoClassDefFoundError
+             in background threads (NodeProvisioner timer) that use the plugin's classloader. -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>2.15.4</version>
-            <scope>provided</scope>
         </dependency>
         <!-- MockWebServer for unit tests — no live API calls -->
         <dependency>
@@ -103,5 +106,18 @@
             <url>https://repo.jenkins-ci.org/public/</url>
         </pluginRepository>
     </pluginRepositories>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.jenkins-ci.tools</groupId>
+                <artifactId>maven-hpi-plugin</artifactId>
+                <configuration>
+                    <!-- Bind to all interfaces so VMs on the LAN can reach Jenkins during dev -->
+                    <host>0.0.0.0</host>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 
 </project>

@@ -1,0 +1,11 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form">
+    <f:entry title="Command" field="command">
+        <f:textarea rows="4" />
+    </f:entry>
+    <f:entry title="Environment Variables" field="environmentVariables">
+        <f:repeatableProperty field="environmentVariables" minimum="0"
+                              header="Environment Variables"
+                              add="Add Variable" />
+    </f:entry>
+</j:jelly>

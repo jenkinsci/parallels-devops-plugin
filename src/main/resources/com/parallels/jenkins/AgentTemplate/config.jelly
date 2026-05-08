@@ -3,16 +3,108 @@
     <f:entry title="Template Label" field="templateLabel">
         <f:textbox />
     </f:entry>
-    <f:entry title="Base VM Name" field="baseVmName">
-        <f:textbox />
-    </f:entry>
     <f:entry title="SSH Credentials" field="sshCredentialsId">
         <c:select />
     </f:entry>
-    <f:entry title="Remote FS Root" field="remoteFs">
-        <f:textbox default="/Users/parallels/jenkins-agent" />
+
+    <f:entry title="Provisioning Mode" field="provisioningMode">
+        <f:select onchange="prl_updateFields(this)" />
     </f:entry>
+
+    <!-- CLONE mode only (Host) -->
+    <div class="prl-clone-fields"
+         style="${(instance != null and instance.provisioningMode == 'CATALOG') ? 'display:none' : ''}">
+        <f:entry title="Base VM Name" field="baseVmName">
+            <f:textbox />
+        </f:entry>
+    </div>
+
+    <!-- CATALOG mode only (Orchestrator) -->
+    <div class="prl-catalog-fields"
+         style="${(instance == null or instance.provisioningMode != 'CATALOG') ? 'display:none' : ''}">
+        <f:entry title="Architecture" field="architecture">
+            <f:select />
+        </f:entry>
+        <f:entry title="Catalog ID" field="catalogId">
+            <f:textbox placeholder="e.g. TIPI_NEW" />
+        </f:entry>
+        <f:entry title="Catalog Version" field="catalogVersion">
+            <f:textbox default="latest" />
+        </f:entry>
+        <f:entry title="Catalog URL" field="catalogUrl">
+            <f:textbox placeholder="https://devops-catalog.example.com" />
+        </f:entry>
+        <f:entry title="Catalog Credentials" field="catalogCredentialsId">
+            <c:select />
+        </f:entry>
+    </div>
+
     <f:entry title="Number of Executors" field="numExecutors">
         <f:number default="1" min="1" />
     </f:entry>
+
+    <script>/*<![CDATA[*/
+    (function () {
+        function prl_updateFields(select) {
+            // select.value may be '' if the browser hasn't settled the chosen
+            // option yet (e.g. when Behaviour fires during DOM injection).
+            // Default to CLONE — the first option and the safe default.
+            var mode    = select.value || 'CLONE';
+            var isClone = (mode === 'CLONE');
+
+            // Walk up to the nearest scoping container so multiple templates
+            // on the same page don't interfere with each other.
+            var container = select.parentElement;
+            while (container && container !== document.body) {
+                if (container.classList.contains('repeated-chunk') ||
+                    container.classList.contains('hetero-list-item') ||
+                    container.classList.contains('jenkins-form-item-group')) {
+                    break;
+                }
+                container = container.parentElement;
+            }
+            if (!container || container === document.body) {
+                container = select.closest('form') || document.body;
+            }
+
+            container.querySelectorAll('.prl-clone-fields').forEach(function (el) {
+                el.style.display = isClone ? '' : 'none';
+            });
+            container.querySelectorAll('.prl-catalog-fields').forEach(function (el) {
+                el.style.display = isClone ? 'none' : '';
+            });
+        }
+
+        window.prl_updateFields = prl_updateFields;
+
+        // Init selects already present on page load.
+        function prl_initAll() {
+            document.querySelectorAll(
+                'select[name$=".provisioningMode"],select[name="provisioningMode"]'
+            ).forEach(function (s) {
+                // Defer so the browser has time to set the default selected option.
+                setTimeout(function () { prl_updateFields(s); }, 0);
+            });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', prl_initAll);
+        } else {
+            prl_initAll();
+        }
+
+        // Handle template entries added dynamically via "Add Template" button.
+        if (window.Behaviour) {
+            Behaviour.specify(
+                "select[name$='.provisioningMode']",
+                'prl-devops-mode',
+                0,
+                function (s) {
+                    // setTimeout so value is settled before we read it.
+                    setTimeout(function () { prl_updateFields(s); }, 0);
+                }
+            );
+        }
+    })();
+    /*]]>*/</script>
 </j:jelly>

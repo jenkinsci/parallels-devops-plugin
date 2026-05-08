@@ -4,6 +4,10 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.parallels.jenkins.api.dto.CloneRequest;
 import com.parallels.jenkins.api.dto.CloneResponse;
+import com.parallels.jenkins.api.dto.CreateVmRequest;
+import com.parallels.jenkins.api.dto.CreateVmResponse;
+import com.parallels.jenkins.api.dto.ExecuteRequest;
+import com.parallels.jenkins.api.dto.ExecuteResponse;
 import com.parallels.jenkins.api.dto.VmStatusResponse;
 import com.parallels.jenkins.api.exception.PrlApiException;
 import com.parallels.jenkins.api.exception.PrlApiTimeoutException;
@@ -11,6 +15,7 @@ import hudson.util.Secret;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.Collections;
 import java.util.Locale;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -85,6 +90,22 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
     }
 
     @Override
+    public CreateVmResponse createVmFromCatalog(CreateVmRequest request) throws PrlApiException {
+        // Catalog creation always targets /api/v1/machines regardless of mode
+        String path = "/api/v1/machines";
+        String body = serialize(request);
+        HttpResponse<String> response = send(
+                HttpRequest.newBuilder()
+                        .uri(toUri(path))
+                        .header("Content-Type", CONTENT_TYPE_JSON)
+                        .header("Authorization", "Bearer " + bearerToken.getPlainText())
+                        .POST(HttpRequest.BodyPublishers.ofString(body))
+                        .build());
+        requireSuccessful(response);
+        return deserialize(response.body(), CreateVmResponse.class);
+    }
+
+    @Override
     public VmStatusResponse getVmStatus(String vmId) throws PrlApiException {
         String path = machinePath(vmId) + "/status";
         HttpResponse<String> response = send(
@@ -98,8 +119,20 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
     }
 
     @Override
+    public void startVm(String vmId) throws PrlApiException {
+        String path = machinePath(vmId) + "/start";
+        HttpResponse<String> response = send(
+                HttpRequest.newBuilder()
+                        .uri(toUri(path))
+                        .header("Authorization", "Bearer " + bearerToken.getPlainText())
+                        .GET()
+                        .build());
+        requireSuccessful(response);
+    }
+
+    @Override
     public void deleteVm(String vmId) throws PrlApiException {
-        String path = machinePath(vmId);
+        String path = machinePath(vmId) + "?force=true";
         HttpResponse<String> response = send(
                 HttpRequest.newBuilder()
                         .uri(toUri(path))
@@ -110,7 +143,22 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
     }
 
     @Override
-    public VmStatusResponse waitForVmReady(String vmId, Duration timeout, Duration interval)
+    public ExecuteResponse executeCommand(String vmId, ExecuteRequest request) throws PrlApiException {
+        String path = machinePath(vmId) + "/execute";
+        String body = serialize(request);
+        HttpResponse<String> response = send(
+                HttpRequest.newBuilder()
+                        .uri(toUri(path))
+                        .header("Content-Type", CONTENT_TYPE_JSON)
+                        .header("Authorization", "Bearer " + bearerToken.getPlainText())
+                        .PUT(HttpRequest.BodyPublishers.ofString(body))
+                        .build());
+        requireSuccessful(response);
+        return deserialize(response.body(), ExecuteResponse.class);
+    }
+
+    @Override
+    public VmStatusResponse waitForVmReady(String vmId, String vmUser, Duration timeout, Duration interval)
             throws PrlApiException, PrlApiTimeoutException {
 
         Instant deadline = Instant.now().plus(timeout);
@@ -121,12 +169,44 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
 
             switch (state) {
                 case "running":
-                    return status;
+                    // VM OS is up — probe the execute API in a loop until it accepts commands
+                    // AND ip_configured is a real IP address (not "-" or blank).
+                    // The Parallels guest agent and IP assignment may still be initialising
+                    // even after the VM reports "running".
+                    while (true) {
+                        boolean ipReady = isValidIp(status.getIpConfigured());
+                        boolean execReady = false;
+                        if (ipReady) {
+                            try {
+                                ExecuteResponse probe = executeCommand(
+                                        vmId,
+                                        new ExecuteRequest("echo prl-ready", vmUser,
+                                                Collections.emptyMap()));
+                                execReady = probe.getExitCode() == 0;
+                            } catch (PrlApiException ignored) {
+                                // Execute API not yet ready — keep retrying
+                            }
+                        }
+                        if (ipReady && execReady) {
+                            return status; // IP assigned + execute API confirmed working
+                        }
+                        if (Instant.now().isAfter(deadline)) {
+                            throw new PrlApiTimeoutException(vmId, timeout);
+                        }
+                        sleep(interval);
+                        // Re-fetch status so ip_configured is updated each iteration.
+                        status = getVmStatus(vmId);
+                        if (Instant.now().isAfter(deadline)) {
+                            throw new PrlApiTimeoutException(vmId, timeout);
+                        }
+                    }
                 case "error":
                     throw new PrlApiException("VM '" + vmId + "' entered error state");
+                case "stopped":
                 case "pending":
                 case "starting":
-                    // keep polling
+                case "suspended":
+                    // keep polling — transient states on the way to running
                     break;
                 default:
                     throw new PrlApiException(
@@ -223,6 +303,11 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
             Thread.currentThread().interrupt();
             throw new PrlApiException("Polling interrupted", e);
         }
+    }
+
+    /** Returns true if {@code ip} is a non-blank, non-placeholder IP address. */
+    private static boolean isValidIp(String ip) {
+        return ip != null && !ip.isBlank() && !ip.equals("-");
     }
 
     // -------------------------------------------------------------------------
