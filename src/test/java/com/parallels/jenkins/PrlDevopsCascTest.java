@@ -40,7 +40,7 @@ class PrlDevopsCascTest {
         assertEquals("test-label", tmpl.getTemplateLabel());
         assertEquals("test-user", tmpl.getVmUser());
         assertEquals("/tmp/test-workspace", tmpl.getAgentWorkspaceDir());
-        assertEquals(2, tmpl.getNumExecutors());
+        assertEquals(1, tmpl.getNumExecutors());
         assertEquals(300, tmpl.getVmReadyTimeoutSeconds());
         assertEquals(10, tmpl.getVmReadyPollIntervalSeconds());
 

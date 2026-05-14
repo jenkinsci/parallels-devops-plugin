@@ -33,6 +33,7 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
 
     private static final String DEFAULT_AGENT_WORKSPACE_DIR = "/tmp/jenkins-agent";
     private static final String DEFAULT_VM_USER = "";
+    private static final int ONE_SHOT_EXECUTORS = 1;
 
     private static final long serialVersionUID = 1L;
 
@@ -47,7 +48,7 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
         * Override with a path that suits your VM image.
      */
         private String agentWorkspaceDir = DEFAULT_AGENT_WORKSPACE_DIR;
-    private int numExecutors = 1;
+    private int numExecutors = ONE_SHOT_EXECUTORS;
     private int vmReadyTimeoutSeconds = 300;
     private int vmReadyPollIntervalSeconds = 10;
 
@@ -74,7 +75,7 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
     public String getVmUser() { return vmUser; }
     public String getSshCredentialsId() { return sshCredentialsId; }
     public String getAgentWorkspaceDir() { return agentWorkspaceDir; }
-    public int getNumExecutors() { return numExecutors; }
+    public int getNumExecutors() { return ONE_SHOT_EXECUTORS; }
     public int getVmReadyTimeoutSeconds() { return vmReadyTimeoutSeconds; }
     public int getVmReadyPollIntervalSeconds() { return vmReadyPollIntervalSeconds; }
     public ProvisioningConfig getProvisioningConfig() { return provisioningConfig; }
@@ -115,6 +116,7 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
         if (vmUser == null) {
             vmUser = DEFAULT_VM_USER;
         }
+        numExecutors = ONE_SHOT_EXECUTORS;
         return this;
     }
 
@@ -168,7 +170,7 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
 
     @DataBoundSetter
     public void setNumExecutors(int numExecutors) {
-        this.numExecutors = numExecutors;
+        this.numExecutors = ONE_SHOT_EXECUTORS;
     }
 
     @DataBoundSetter

@@ -55,7 +55,7 @@ class PrlDevopsCloudTest {
         AgentTemplate loadedTemplate = loaded.getTemplates().get(0);
         assertEquals("macos-sonoma", loadedTemplate.getTemplateLabel());
         assertEquals("macOS-Sonoma-base", loadedTemplate.getBaseVmName());
-        assertEquals(2, loadedTemplate.getNumExecutors());
+        assertEquals(1, loadedTemplate.getNumExecutors());
     }
 
     @Test

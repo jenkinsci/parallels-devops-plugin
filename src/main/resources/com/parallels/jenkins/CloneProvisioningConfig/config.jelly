@@ -1,6 +1,6 @@
 <?jelly escape-by-default='true'?>
 <j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form">
-    <f:entry title="Base VM Name" field="baseVmName">
+    <f:entry title="Base VM Name or VM ID" field="baseVmName">
         <f:textbox description="Name of the existing VM registered in prl-devops-service that will be cloned for each build." />
     </f:entry>
 </j:jelly>

@@ -15,10 +15,6 @@
         <f:dropdownDescriptorSelector field="provisioningConfig"
                                       descriptors="${descriptor.provisioningConfigDescriptors}" />
     </f:entry>
-
-    <f:entry title="Number of Executors" field="numExecutors">
-        <f:number default="1" min="1" />
-    </f:entry>
     <f:entry title="VM Ready Timeout (s)" field="vmReadyTimeoutSeconds">
         <f:number default="300" min="30" description="How long to wait (in seconds) for the VM to reach running state before failing." />
     </f:entry>
