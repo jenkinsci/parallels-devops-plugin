@@ -7,24 +7,16 @@ import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredenti
 import com.parallels.jenkins.api.ConnectionMode;
 import com.parallels.jenkins.api.PrlDevopsApiClient;
 import com.parallels.jenkins.api.PrlDevopsHttpClient;
-import com.parallels.jenkins.api.dto.CatalogManifest;
-import com.parallels.jenkins.api.dto.CloneRequest;
-import com.parallels.jenkins.api.dto.CloneResponse;
-import com.parallels.jenkins.api.dto.CreateVmRequest;
-import com.parallels.jenkins.api.dto.CreateVmResponse;
 import com.parallels.jenkins.api.dto.VmStatusResponse;
 import com.parallels.jenkins.api.exception.PrlApiException;
 import hudson.Extension;
-import hudson.model.AbstractBuild;
 import hudson.model.AsyncPeriodicWork;
 import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.Item;
 import hudson.model.Label;
 import hudson.model.Node;
-import hudson.model.Run;
 import hudson.model.TaskListener;
-import hudson.model.listeners.RunListener;
 import hudson.security.ACL;
 import hudson.slaves.Cloud;
 import hudson.slaves.NodeProvisioner;
@@ -32,10 +24,12 @@ import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import hudson.Util;
 import jenkins.model.Jenkins;
+import net.sf.json.JSONObject;
 import org.jenkinsci.plugins.plaincredentials.StringCredentials;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.StaplerRequest2;
 import org.kohsuke.stapler.verb.POST;
 
 import java.net.URI;
@@ -49,9 +43,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -118,8 +109,8 @@ public class PrlDevopsCloud extends Cloud {
      */
     private long countActiveAgents() {
         return Jenkins.get().getNodes().stream()
-                .filter(n -> n instanceof PrlDevopsAgent
-                        && name.equals(((PrlDevopsAgent) n).getCloudName()))
+            .filter(n -> n instanceof PrlDevopsAgent agent
+                && name.equals(agent.getCloudName()))
                 .filter(n -> {
                     Computer c = n.toComputer();
                     if (c == null) return false;
@@ -127,7 +118,7 @@ public class PrlDevopsCloud extends Cloud {
                     // Count any node (connecting, SSH-failed, or temporarily offline)
                     // that is still within the VM-ready grace window.  The reconciler
                     // will remove it if the VM is genuinely gone.
-                    PrlDevopsAgent prl = (PrlDevopsAgent) n;
+                        PrlDevopsAgent prl = (PrlDevopsAgent) n;
                     long ageSeconds =
                             (System.currentTimeMillis() - prl.getProvisionedAt()) / 1000L;
                     long graceSeconds = prl.getTemplate().getVmReadyTimeoutSeconds() * 2L;
@@ -143,13 +134,7 @@ public class PrlDevopsCloud extends Cloud {
         if (Util.fixEmptyAndTrim(serviceUrl) == null) return false;
         if (Util.fixEmptyAndTrim(credentialsId) == null) return false;
         if (Util.fixEmptyAndTrim(template.getSshCredentialsId()) == null) return false;
-        // Reject templates whose essential provisioning fields are not yet configured.
-        if (template.getProvisioningMode() == VmProvisioningMode.CATALOG) {
-            if (Util.fixEmptyAndTrim(template.getCatalogId()) == null
-                    || Util.fixEmptyAndTrim(template.getCatalogUrl()) == null) return false;
-        } else {
-            if (Util.fixEmptyAndTrim(template.getBaseVmName()) == null) return false;
-        }
+        if (!template.canProvision()) return false;
         // Prevent Jenkins from even scheduling a provisioning cycle when already at cap.
         return maxAgents <= 0 || countActiveAgents() < maxAgents;
     }
@@ -165,6 +150,11 @@ public class PrlDevopsCloud extends Cloud {
         if (Util.fixEmptyAndTrim(template.getSshCredentialsId()) == null) {
             LOGGER.warning("[PrlDevops] Template '" + template.getTemplateLabel()
                     + "' has no SSH credentials configured. Skipping provisioning.");
+            return Collections.emptyList();
+        }
+        if (!template.canProvision()) {
+            LOGGER.warning("[PrlDevops] Template '" + template.getTemplateLabel()
+                + "' is missing provisioning configuration. Skipping provisioning.");
             return Collections.emptyList();
         }
 
@@ -192,92 +182,20 @@ public class PrlDevopsCloud extends Cloud {
         List<NodeProvisioner.PlannedNode> plannedNodes = new ArrayList<>();
         for (int i = 0; i < toProvision; i++) {
             try {
-                String vmId;
-                boolean startOnCreate;
-                if (template.getProvisioningMode() == VmProvisioningMode.CATALOG) {
-                    vmId = provisionFromCatalog(apiClient, template, label);
-                    startOnCreate = true; // API starts VM on creation
-                } else {
-                    vmId = provisionFromClone(apiClient, template, label);
-                    startOnCreate = false; // clone comes up stopped; PlannedNode calls startVm()
-                }
-                plannedNodes.add(new PrlDevopsPlannedNode(
-                        name, template, vmId, apiClient, timeout, pollInterval,
-                        startOnCreate, Computer.threadPoolForRemoting));
+                plannedNodes.add(template.provision(
+                        name,
+                        label,
+                        apiClient,
+                        timeout,
+                        pollInterval,
+                        Computer.threadPoolForRemoting));
             } catch (PrlApiException e) {
                 LOGGER.log(Level.WARNING,
                         "[PrlDevops] Failed to provision VM for template '"
-                                + template.getBaseVmName() + "': " + e.getMessage(), e);
+                                + template.getTemplateLabel() + "': " + e.getMessage(), e);
             }
         }
         return plannedNodes;
-    }
-
-    private String provisionFromClone(PrlDevopsApiClient apiClient,
-                                      AgentTemplate template,
-                                      Label label) throws PrlApiException {
-        String baseVmName = Util.fixEmptyAndTrim(template.getBaseVmName());
-        if (baseVmName == null) {
-            throw new PrlApiException(
-                    "Template '" + template.getTemplateLabel()
-                    + "': Base VM Name is not configured. "
-                    + "Please set it under Manage Jenkins → Clouds → "
-                    + name + " → template '" + template.getTemplateLabel() + "'.");
-        }
-        CloneRequest cloneRequest = new CloneRequest(
-                "jenkins-" + label + "-" + System.currentTimeMillis(), null);
-        LOGGER.fine("[PrlDevops] Requesting clone of '" + baseVmName
-                + "' for label '" + label + "'");
-        CloneResponse cloneResponse = apiClient.cloneVm(baseVmName, cloneRequest);
-        String vmId = cloneResponse.getId();
-        LOGGER.fine("[PrlDevops] Clone requested; VM ID=" + vmId);
-        return vmId;
-    }
-
-    private String provisionFromCatalog(PrlDevopsApiClient apiClient,
-                                        AgentTemplate template,
-                                        Label label) throws PrlApiException {
-        String connection = buildCatalogConnectionString(template);
-        CatalogManifest manifest = new CatalogManifest(
-                template.getCatalogId(),
-                template.getCatalogVersion(),
-                connection);
-        String vmName = "jenkins-" + label + "-" + System.currentTimeMillis();
-        CreateVmRequest request = new CreateVmRequest(vmName, template.getArchitecture(), manifest);
-        LOGGER.fine("[PrlDevops] Creating VM from catalog '" + template.getCatalogId()
-                + "' for label '" + label + "'");
-        CreateVmResponse response = apiClient.createVmFromCatalog(request);
-        String vmId = response.getId();
-        LOGGER.fine("[PrlDevops] Catalog VM created; VM ID=" + vmId);
-        return vmId;
-    }
-
-    /**
-     * Resolves the catalog credentials and builds the connection string in the format:
-     * {@code host=username:password@https://catalog.example.com}
-     */
-    private String buildCatalogConnectionString(AgentTemplate template) throws PrlApiException {
-        String credId = template.getCatalogCredentialsId();
-        String catalogUrl = template.getCatalogUrl();
-        if (credId == null || credId.isBlank()) {
-            throw new PrlApiException("Catalog credentials ID is not configured on the template");
-        }
-        if (catalogUrl == null || catalogUrl.isBlank()) {
-            throw new PrlApiException("Catalog URL is not configured on the template");
-        }
-        java.util.List<StandardUsernamePasswordCredentials> matches =
-                CredentialsProvider.lookupCredentials(
-                        StandardUsernamePasswordCredentials.class,
-                        Jenkins.get(),
-                        ACL.SYSTEM,
-                        Collections.emptyList());
-        StandardUsernamePasswordCredentials cred = CredentialsMatchers.firstOrNull(
-                matches, CredentialsMatchers.withId(credId));
-        if (cred == null) {
-            throw new PrlApiException("Catalog credentials '" + credId + "' not found");
-        }
-        String url = catalogUrl.endsWith("/") ? catalogUrl.substring(0, catalogUrl.length() - 1) : catalogUrl;
-        return "host=" + cred.getUsername() + ":" + cred.getPassword().getPlainText() + "@" + url;
     }
 
     // -------------------------------------------------------------------------
@@ -433,10 +351,9 @@ public class PrlDevopsCloud extends Cloud {
         protected void execute(TaskListener listener) {
             Jenkins jenkins = Jenkins.get();
             for (Node node : new ArrayList<>(jenkins.getNodes())) {
-                if (!(node instanceof PrlDevopsAgent)) {
+                if (!(node instanceof PrlDevopsAgent agent)) {
                     continue;
                 }
-                PrlDevopsAgent agent = (PrlDevopsAgent) node;
                 Computer computer = agent.toComputer();
 
                 // Computer not yet initialised — node was just added; skip this cycle.
@@ -450,14 +367,13 @@ public class PrlDevopsCloud extends Cloud {
                 }
 
                 Cloud cloud = jenkins.clouds.getByName(agent.getCloudName());
-                if (!(cloud instanceof PrlDevopsCloud)) {
+                if (!(cloud instanceof PrlDevopsCloud prlCloud)) {
                     LOG.info("[PrlDevops] Removing node " + agent.getNodeName()
                             + " — owning cloud '" + agent.getCloudName() + "' no longer exists.");
                     removeNode(jenkins, agent);
                     continue;
                 }
 
-                PrlDevopsCloud prlCloud = (PrlDevopsCloud) cloud;
                 try {
                     PrlDevopsApiClient client = prlCloud.buildApiClient();
                     VmStatusResponse status = client.getVmStatus(agent.getVmId());
@@ -547,85 +463,21 @@ public class PrlDevopsCloud extends Cloud {
         }
     }
 
-    /**
-     * Tears down the cloned VM immediately after each build completes.
-     *
-     * <p>This makes every {@link PrlDevopsAgent} truly one-shot:
-     * <ol>
-     *   <li>Build finishes (success or failure)
-     *   <li>VM is deleted via the Parallels DevOps API
-     *   <li>Node is removed from Jenkins
-     * </ol>
-     * Without this, Jenkins sees the node as reusable and will not provision
-     * a new clone for the next queued build.
-     */
-    @Extension
-    public static final class BuildCompletionListener extends RunListener<Run<?, ?>> {
-
-        private static final Logger LOG =
-                Logger.getLogger(BuildCompletionListener.class.getName());
-
-        @Override
-        public void onFinalized(Run<?, ?> run) {
-            if (!(run instanceof AbstractBuild)) {
-                return; // Pipeline runs are not handled here
-            }
-            Node node = ((AbstractBuild<?, ?>) run).getBuiltOn();
-            if (!(node instanceof PrlDevopsAgent)) {
-                return;
-            }
-            PrlDevopsAgent agent = (PrlDevopsAgent) node;
-            Jenkins jenkins = Jenkins.get();
-
-            Computer computer = agent.toComputer();
-            if (computer != null) {
-                try {
-                    computer.disconnect().get(30, TimeUnit.SECONDS);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    LOG.log(Level.FINE,
-                            "[PrlDevops] Interrupted while disconnecting " + agent.getNodeName(), e);
-                } catch (ExecutionException | TimeoutException e) {
-                    LOG.log(Level.FINE,
-                            "[PrlDevops] Could not confirm clean disconnect for " + agent.getNodeName()
-                                    + " before VM deletion.", e);
-                }
-            }
-
-            // Force-delete the VM (running or not) using ?force=true
-            Cloud cloud = jenkins.clouds.getByName(agent.getCloudName());
-            if (cloud instanceof PrlDevopsCloud) {
-                try {
-                    PrlDevopsApiClient client = ((PrlDevopsCloud) cloud).buildApiClient();
-                    client.deleteVm(agent.getVmId());
-                    LOG.info("[PrlDevops] Deleted VM " + agent.getVmId()
-                            + " after build " + run.getFullDisplayName());
-                } catch (PrlApiException e) {
-                    LOG.log(Level.WARNING,
-                            "[PrlDevops] Failed to delete VM " + agent.getVmId()
-                                    + " after build completion: " + e.getMessage(), e);
-                }
-            }
-
-            // Remove the node so Jenkins provisions a fresh clone for the next build
-            try {
-                jenkins.removeNode(agent);
-                LOG.info("[PrlDevops] Removed node " + agent.getNodeName()
-                        + " after build " + run.getFullDisplayName());
-            } catch (IOException e) {
-                LOG.log(Level.WARNING,
-                        "[PrlDevops] Failed to remove node " + agent.getNodeName()
-                                + " after build completion: " + e.getMessage(), e);
-            }
-        }
-    }
-
     @Extension
     @org.jenkinsci.Symbol("parallelsDevops")
     public static class DescriptorImpl extends Descriptor<Cloud> {
         @Override
         public String getDisplayName() {
             return "Parallels Devops Cloud";
+        }
+
+        @Override
+        public Cloud newInstance(StaplerRequest2 req, JSONObject formData) throws FormException {
+            PrlDevopsCloud cloud = (PrlDevopsCloud) super.newInstance(req, formData);
+            if (Util.fixEmptyAndTrim(cloud.getCredentialsId()) == null) {
+                throw new FormException("API credentials are required", "credentialsId");
+            }
+            return cloud;
         }
 
         @POST
@@ -652,6 +504,15 @@ public class PrlDevopsCloud extends Cloud {
                             CredentialsMatchers.always()
                     )
                     .includeCurrentValue(credentialsId);
+        }
+
+        @POST
+        public FormValidation doCheckCredentialsId(@QueryParameter String credentialsId) {
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+            if (Util.fixEmptyAndTrim(credentialsId) == null) {
+                return FormValidation.error("API credentials are required");
+            }
+            return FormValidation.ok();
         }
 
         @POST

@@ -182,6 +182,7 @@ class PrlDevopsProvisionTest {
         assertEquals("prl-vm-def-456", agent.getNodeName());
         assertEquals("vm-def-456", agent.getVmId());
         assertEquals("PrlCloud2", agent.getCloudName());
+        assertInstanceOf(PrlDevopsRetentionStrategy.class, agent.getRetentionStrategy());
     }
 
     @Test

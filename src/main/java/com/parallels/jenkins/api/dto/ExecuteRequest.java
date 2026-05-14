@@ -1,5 +1,6 @@
 package com.parallels.jenkins.api.dto;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.Map;
@@ -20,6 +21,7 @@ public class ExecuteRequest {
     @JsonProperty("command")
     private final String command;
 
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
     @JsonProperty("user")
     private final String user;
 

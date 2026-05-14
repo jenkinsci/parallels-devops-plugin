@@ -8,7 +8,7 @@
     </f:entry>
     <f:entry title="Agent Workspace Directory" field="agentWorkspaceDir">
         <f:textbox default="/tmp/jenkins-agent"
-                   description="Filesystem path for the Jenkins agent workspace on the VM. Use /tmp/jenkins-agent for Linux/macOS or e.g. C:/jenkins-agent for Windows." />
+                   description="Filesystem path for the Jenkins agent workspace on the VM. Override this if your image uses a different writable location." />
     </f:entry>
 
     <f:entry title="Provisioning Mode" field="provisioningConfig">
@@ -18,9 +18,6 @@
 
     <f:entry title="Number of Executors" field="numExecutors">
         <f:number default="1" min="1" />
-    </f:entry>
-    <f:entry title="VM User" field="vmUser">
-        <f:textbox default="parallels" />
     </f:entry>
     <f:entry title="VM Ready Timeout (s)" field="vmReadyTimeoutSeconds">
         <f:number default="300" min="30" description="How long to wait (in seconds) for the VM to reach running state before failing." />

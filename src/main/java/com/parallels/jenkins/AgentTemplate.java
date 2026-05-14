@@ -9,11 +9,15 @@ import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
 import hudson.model.Label;
 import hudson.security.ACL;
+import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
+import hudson.Util;
 import jenkins.model.Jenkins;
+import net.sf.json.JSONObject;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.StaplerRequest2;
 import org.kohsuke.stapler.verb.POST;
 
 import java.io.Serializable;
@@ -27,19 +31,22 @@ import java.util.Collections;
  */
 public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implements Serializable {
 
+    private static final String DEFAULT_AGENT_WORKSPACE_DIR = "/tmp/jenkins-agent";
+    private static final String DEFAULT_VM_USER = "";
+
     private static final long serialVersionUID = 1L;
 
     private final String templateLabel;
     /** OS user account used to run commands on the VM via the execute API. */
-    private String vmUser = "parallels";
+    private String vmUser = DEFAULT_VM_USER;
     /** Jenkins credentials ID for SSH agent bootstrap (username + password or key). */
     private String sshCredentialsId;
     /**
      * Filesystem path used as the Jenkins agent workspace on the provisioned VM.
-     * Defaults to {@code /tmp/jenkins-agent} which exists on every OS.
-     * Override with a path that suits your VM image (e.g. {@code /Users/parallels/jenkins-agent}).
+        * Defaults to {@code /tmp/jenkins-agent} for compatibility with existing test images.
+        * Override with a path that suits your VM image.
      */
-    private String agentWorkspaceDir = "/tmp/jenkins-agent";
+        private String agentWorkspaceDir = DEFAULT_AGENT_WORKSPACE_DIR;
     private int numExecutors = 1;
     private int vmReadyTimeoutSeconds = 300;
     private int vmReadyPollIntervalSeconds = 10;
@@ -72,6 +79,24 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
     public int getVmReadyPollIntervalSeconds() { return vmReadyPollIntervalSeconds; }
     public ProvisioningConfig getProvisioningConfig() { return provisioningConfig; }
 
+    public boolean canProvision() {
+        return provisioningConfig != null && provisioningConfig.canProvision();
+    }
+
+    public PrlDevopsPlannedNode provision(String cloudName,
+                                          Label label,
+                                          com.parallels.jenkins.api.PrlDevopsApiClient apiClient,
+                                          java.time.Duration timeout,
+                                          java.time.Duration pollInterval,
+                                          java.util.concurrent.ExecutorService executor)
+            throws com.parallels.jenkins.api.exception.PrlApiException {
+        if (provisioningConfig == null) {
+            throw new com.parallels.jenkins.api.exception.PrlApiException(
+                    "No provisioning mode is configured for template '" + templateLabel + "'.");
+        }
+        return provisioningConfig.provision(cloudName, this, label, apiClient, timeout, pollInterval, executor);
+    }
+
     /**
      * XStream deserialization hook. Migrates old configs that stored
      * {@code baseVmName} directly on this class (before the
@@ -85,7 +110,10 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
                     baseVmName != null ? baseVmName : "");
         }
         if (agentWorkspaceDir == null || agentWorkspaceDir.isBlank()) {
-            agentWorkspaceDir = "/tmp/jenkins-agent";
+            agentWorkspaceDir = DEFAULT_AGENT_WORKSPACE_DIR;
+        }
+        if (vmUser == null) {
+            vmUser = DEFAULT_VM_USER;
         }
         return this;
     }
@@ -124,7 +152,7 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
 
     @DataBoundSetter
     public void setVmUser(String vmUser) {
-        this.vmUser = (vmUser != null && !vmUser.isBlank()) ? vmUser : "parallels";
+        this.vmUser = vmUser != null ? vmUser.trim() : DEFAULT_VM_USER;
     }
 
     @DataBoundSetter
@@ -135,7 +163,7 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
     @DataBoundSetter
     public void setAgentWorkspaceDir(String agentWorkspaceDir) {
         this.agentWorkspaceDir = (agentWorkspaceDir != null && !agentWorkspaceDir.isBlank())
-                ? agentWorkspaceDir : "/tmp/jenkins-agent";
+                ? agentWorkspaceDir : DEFAULT_AGENT_WORKSPACE_DIR;
     }
 
     @DataBoundSetter
@@ -184,6 +212,15 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
             return jenkins.model.Jenkins.get().getDescriptorList(ProvisioningConfig.class);
         }
 
+        @Override
+        public AgentTemplate newInstance(StaplerRequest2 req, JSONObject formData) throws FormException {
+            AgentTemplate template = (AgentTemplate) super.newInstance(req, formData);
+            if (Util.fixEmptyAndTrim(template.getSshCredentialsId()) == null) {
+                throw new FormException("SSH credentials are required", "sshCredentialsId");
+            }
+            return template;
+        }
+
         @POST
         public ListBoxModel doFillSshCredentialsIdItems(@QueryParameter String sshCredentialsId) {
             Jenkins jenkins = Jenkins.get();
@@ -200,6 +237,15 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
                             CredentialsMatchers.always()
                     )
                     .includeCurrentValue(sshCredentialsId);
+        }
+
+        @POST
+        public FormValidation doCheckSshCredentialsId(@QueryParameter String sshCredentialsId) {
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+            if (Util.fixEmptyAndTrim(sshCredentialsId) == null) {
+                return FormValidation.error("SSH credentials are required");
+            }
+            return FormValidation.ok();
         }
     }
 }

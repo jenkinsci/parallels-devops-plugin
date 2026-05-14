@@ -5,9 +5,7 @@ import hudson.model.Node;
 import hudson.model.TaskListener;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.plugins.sshslaves.verifiers.NonVerifyingKeyVerificationStrategy;
-import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.AbstractCloudSlave;
-import hudson.slaves.RetentionStrategy;
 
 import java.io.IOException;
 
@@ -41,7 +39,7 @@ public class PrlDevopsAgent extends AbstractCloudSlave {
         setNumExecutors(template.getNumExecutors());
         setLabelString(template.getTemplateLabel());
         setMode(Node.Mode.NORMAL);
-        setRetentionStrategy(RetentionStrategy.NOOP);
+        setRetentionStrategy(new PrlDevopsRetentionStrategy());
     }
 
     /**
@@ -79,8 +77,8 @@ public class PrlDevopsAgent extends AbstractCloudSlave {
     }
 
     @Override
-    public AbstractCloudComputer<PrlDevopsAgent> createComputer() {
-        return new AbstractCloudComputer<>(this);
+    public PrlDevopsComputer createComputer() {
+        return new PrlDevopsComputer(this);
     }
 
     @Override
