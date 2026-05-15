@@ -295,6 +295,7 @@ Fill in the template fields:
    echo "IP: $(ipconfig getifaddr en0 2>/dev/null || ifconfig | grep 'inet ' | grep -v '127.0.0.1' | head -1)"
    echo "Agent node name: $NODE_NAME"
    echo "Agent labels: $NODE_LABELS"
+   sleep 5  # Keep the agent busy for a bit to test retention strategy
    ```
 6. Click **Save**.
 
