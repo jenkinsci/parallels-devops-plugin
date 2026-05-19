@@ -130,6 +130,8 @@ Typical fields include:
 
 This is the better fit when you want centrally managed images and orchestrated provisioning.
 
+![Catalog-based provisioning template](docs/images/catalog-based.png)
+
 ### Advanced SSH settings
 
 Expand **Advanced** on the template to tune agent bootstrap behavior.
