@@ -29,9 +29,6 @@ public abstract class ProvisioningConfig
 
     private static final long serialVersionUID = 1L;
 
-    /** Returns the {@link VmProvisioningMode} constant this config represents. */
-    public abstract VmProvisioningMode getMode();
-
     /** Returns {@code true} when the fields required for this mode are configured. */
     public abstract boolean canProvision();
 

@@ -12,10 +12,7 @@
                        description="Filesystem path for the Jenkins agent workspace on the VM. Override this if your image uses a different writable location." />
         </f:entry>
 
-        <f:entry title="Provisioning Mode" field="provisioningConfig">
-            <f:dropdownDescriptorSelector field="provisioningConfig"
-                                          descriptors="${descriptor.provisioningConfigDescriptors}" />
-        </f:entry>
+        <f:dropdownDescriptorSelector title="Provisioning Mode" field="provisioningConfig" />
         <f:entry title="VM Ready Timeout (s)" field="vmReadyTimeoutSeconds">
             <f:number default="600" min="30" description="How long to wait (in seconds) for the VM to boot and become SSH-ready after creation. Increase if your catalog image takes longer to download." />
         </f:entry>

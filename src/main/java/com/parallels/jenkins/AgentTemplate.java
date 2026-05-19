@@ -149,10 +149,6 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
         return this;
     }
 
-    public VmProvisioningMode getProvisioningMode() {
-        return provisioningConfig != null ? provisioningConfig.getMode() : VmProvisioningMode.CLONE;
-    }
-
     public String getBaseVmName() {
         return provisioningConfig instanceof CloneProvisioningConfig c ? c.getBaseVmName() : null;
     }
@@ -256,10 +252,6 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
         @Override
         public String getDisplayName() {
             return "VM Template";
-        }
-
-        public java.util.List<Descriptor<ProvisioningConfig>> getProvisioningConfigDescriptors() {
-            return Jenkins.get().getDescriptorList(ProvisioningConfig.class);
         }
 
         @Override

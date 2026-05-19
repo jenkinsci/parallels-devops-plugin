@@ -19,7 +19,7 @@
     </f:entry>
     <f:validateButton title="Test Connection" method="testConnection"
                       with="serviceUrl,credentialsId" />
-    <f:block>
-        <f:repeatableProperty field="templates" />
-    </f:block>
+    <f:entry title="Templates">
+        <f:repeatableProperty field="templates" minimum="1" add="Add Template" />
+    </f:entry>
 </j:jelly>

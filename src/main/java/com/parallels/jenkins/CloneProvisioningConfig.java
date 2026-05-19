@@ -35,9 +35,6 @@ public final class CloneProvisioningConfig extends ProvisioningConfig {
     public String getBaseVmName() { return baseVmName; }
 
     @Override
-    public VmProvisioningMode getMode() { return VmProvisioningMode.CLONE; }
-
-    @Override
     public boolean canProvision() {
         return Util.fixEmptyAndTrim(baseVmName) != null;
     }

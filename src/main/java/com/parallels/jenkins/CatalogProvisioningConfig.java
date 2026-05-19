@@ -72,9 +72,6 @@ public final class CatalogProvisioningConfig extends ProvisioningConfig {
     }
 
     @Override
-    public VmProvisioningMode getMode() { return VmProvisioningMode.CATALOG; }
-
-    @Override
     public boolean canProvision() {
         return Util.fixEmptyAndTrim(catalogId) != null
                 && Util.fixEmptyAndTrim(catalogUrl) != null;
