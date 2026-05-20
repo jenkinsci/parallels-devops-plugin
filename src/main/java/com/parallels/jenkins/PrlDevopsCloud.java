@@ -224,67 +224,50 @@ public class PrlDevopsCloud extends Cloud {
     // -------------------------------------------------------------------------
 
     /**
-     * Resolves the bearer token from the configured credentials and constructs
-     * a {@link PrlDevopsApiClient} pointed at the configured service URL.
+     * Looks up the configured credentials and constructs a {@link PrlDevopsApiClient}
+     * pointed at the configured service URL.
+     *
+     * <ul>
+     *   <li>{@link StringCredentials} — API key mode: sends {@code X-API-Key: <encoded>}.</li>
+     *   <li>{@link StandardUsernamePasswordCredentials} — Bearer mode: exchanges
+     *       username+password for a JWT via {@code POST /api/v1/auth/token}.</li>
+     * </ul>
      *
      * <p>Protected so tests can override and inject a mock client.
      *
      * @throws PrlApiException if credentials cannot be resolved.
      */
     protected PrlDevopsApiClient buildApiClient() throws PrlApiException {
-        String token = resolveToken();
-        return new PrlDevopsHttpClient.Builder()
-                .baseUrl(serviceUrl)
-                .bearerToken(token)
-                .mode(connectionMode != null ? connectionMode : ConnectionMode.HOST)
-                .build();
-    }
-
-    /**
-     * Looks up the configured credentials and returns a bearer token string.
-     *
-     * <p>Supports two credential types:
-     * <ul>
-     *   <li>{@link StringCredentials} — the secret text is used directly as a bearer token.</li>
-     *   <li>{@link StandardUsernamePasswordCredentials} — the plugin POSTs to
-     *       {@code POST /api/v1/auth/token} to exchange username+password for a token.</li>
-     * </ul>
-     *
-     * @throws PrlApiException if credentials are not configured, cannot be found, or the
-     *                         auth exchange fails.
-     */
-    private String resolveToken() throws PrlApiException {
         if (Util.fixEmptyAndTrim(credentialsId) == null) {
             throw new PrlApiException("No credentials configured on cloud '" + name + "'");
         }
 
-        // 1. Try Secret Text (direct bearer token)
+        PrlDevopsHttpClient.Builder builder = new PrlDevopsHttpClient.Builder()
+                .baseUrl(serviceUrl)
+                .mode(connectionMode != null ? connectionMode : ConnectionMode.HOST);
+
+        // API key (Secret Text) — use X-API-Key header directly
         StringCredentials sc = CredentialsMatchers.firstOrNull(
                 CredentialsProvider.lookupCredentials(
-                        StringCredentials.class,
-                        Jenkins.get(),
-                        ACL.SYSTEM,
-                        Collections.emptyList()),
+                        StringCredentials.class, Jenkins.get(), ACL.SYSTEM, Collections.emptyList()),
                 CredentialsMatchers.withId(credentialsId));
         if (sc != null) {
-            return sc.getSecret().getPlainText();
+            return builder.apiKey(sc.getSecret().getPlainText()).build();
         }
 
-        // 2. Try Username + Password — exchange for a token via the auth endpoint
+        // Username + Password — exchange for a JWT Bearer token
         StandardUsernamePasswordCredentials upc = CredentialsMatchers.firstOrNull(
                 CredentialsProvider.lookupCredentials(
                         StandardUsernamePasswordCredentials.class,
-                        Jenkins.get(),
-                        ACL.SYSTEM,
-                        Collections.emptyList()),
+                        Jenkins.get(), ACL.SYSTEM, Collections.emptyList()),
                 CredentialsMatchers.withId(credentialsId));
         if (upc != null) {
-            return fetchTokenWithPassword(upc);
+            return builder.bearerToken(fetchTokenWithPassword(upc)).build();
         }
 
         throw new PrlApiException(
                 "Credentials '" + credentialsId + "' not found. Configure a 'Secret text' "
-                        + "(bearer token) or 'Username with password' credential.");
+                        + "(API key) or 'Username with password' credential.");
     }
 
     /**
@@ -561,104 +544,99 @@ public class PrlDevopsCloud extends Cloud {
             if (Util.fixEmptyAndTrim(serviceUrl) == null) {
                 return FormValidation.error("Service URL is required");
             }
+            if (Util.fixEmptyAndTrim(credentialsId) == null) {
+                return FormValidation.error("API credentials are required");
+            }
 
-            // Extract token
-            String token = "";
-            if (Util.fixEmptyAndTrim(credentialsId) != null) {
-                StringCredentials sc = CredentialsMatchers.firstOrNull(
-                        CredentialsProvider.lookupCredentials(
-                                StringCredentials.class,
-                                Jenkins.get(),
-                                ACL.SYSTEM,
-                                Collections.emptyList()
-                        ),
-                        CredentialsMatchers.withId(credentialsId)
-                );
-                if (sc != null) {
-                    // Secret text token directly provided
-                    token = sc.getSecret().getPlainText();
-                } else {
-                    StandardUsernamePasswordCredentials upc = CredentialsMatchers.firstOrNull(
-                            CredentialsProvider.lookupCredentials(
-                                    StandardUsernamePasswordCredentials.class,
-                                    Jenkins.get(),
-                                    ACL.SYSTEM,
-                                    Collections.emptyList()
-                            ),
-                            CredentialsMatchers.withId(credentialsId)
-                    );
-                    if (upc != null) {
-                        try {
-                            String baseUrl = serviceUrl;
-                            if (!baseUrl.endsWith("/")) { baseUrl += "/"; }
-                            String authUrl = baseUrl + "api/v1/auth/token";
-                            String jsonBody = serializeAuthTokenRequest(
-                                upc.getUsername(),
-                                upc.getPassword().getPlainText());
+            String base = serviceUrl.endsWith("/") ? serviceUrl : serviceUrl + "/";
+            HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
-                            HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
-                            HttpRequest authReq = HttpRequest.newBuilder()
-                                    .uri(URI.create(authUrl))
-                                    .header("Content-Type", "application/json")
-                                    .header("Accept", "application/json")
-                                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                                    .build();
-
-                            HttpResponse<String> authRes = client.send(authReq, HttpResponse.BodyHandlers.ofString());
-                            if (authRes.statusCode() == 200) {
-                                java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"token\"\\s*:\\s*\"([^\"]+)\"").matcher(authRes.body());
-                                if (m.find()) {
-                                    token = m.group(1);
-                                } else {
-                                    return FormValidation.error("Auth successful but no 'token' property found in JSON.");
-                                }
-                            } else {
-                                return FormValidation.error("Auth token POST failed. HTTP " + authRes.statusCode() + " " + authRes.body());
-                            }
-                        } catch (IOException | IllegalArgumentException e) {
-                            return FormValidation.error("Authentication error: " + e.getMessage());
-                        } catch (InterruptedException e) {
-                            Thread.currentThread().interrupt();
-                            return FormValidation.error("Authentication interrupted");
-                        }
+            // --- API Key (Secret Text) — test with X-API-Key on a protected endpoint ---
+            StringCredentials sc = CredentialsMatchers.firstOrNull(
+                    CredentialsProvider.lookupCredentials(
+                            StringCredentials.class, Jenkins.get(), ACL.SYSTEM, Collections.emptyList()),
+                    CredentialsMatchers.withId(credentialsId));
+            if (sc != null) {
+                try {
+                    HttpRequest req = HttpRequest.newBuilder()
+                            .uri(URI.create(base + "api/v1/auth/api_keys"))
+                            .header("X-API-Key", sc.getSecret().getPlainText())
+                            .header("Accept", "application/json")
+                            .GET()
+                            .build();
+                    HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
+                    if (res.statusCode() == 200) {
+                        return FormValidation.ok("Connected");
+                    } else if (res.statusCode() == 401) {
+                        return FormValidation.error("Authentication failed (401). Check the API key 'encoded' value.");
+                    } else {
+                        return FormValidation.error("Unexpected response. HTTP " + res.statusCode());
                     }
+                } catch (IOException | IllegalArgumentException e) {
+                    return FormValidation.error("Connection error: " + e.getMessage());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return FormValidation.error("Connection interrupted");
                 }
             }
 
-            if (Util.fixEmptyAndTrim(token) == null) {
-                return FormValidation.error("Credentials not found or empty");
+            // --- Username + Password — exchange for JWT then validate it ---
+            StandardUsernamePasswordCredentials upc = CredentialsMatchers.firstOrNull(
+                    CredentialsProvider.lookupCredentials(
+                            StandardUsernamePasswordCredentials.class,
+                            Jenkins.get(), ACL.SYSTEM, Collections.emptyList()),
+                    CredentialsMatchers.withId(credentialsId));
+            if (upc != null) {
+                try {
+                    // Step 1: get token
+                    String jsonBody = serializeAuthTokenRequest(
+                            upc.getUsername(), upc.getPassword().getPlainText());
+                    HttpRequest authReq = HttpRequest.newBuilder()
+                            .uri(URI.create(base + "api/v1/auth/token"))
+                            .header("Content-Type", "application/json")
+                            .header("Accept", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                            .build();
+                    HttpResponse<String> authRes = client.send(authReq, HttpResponse.BodyHandlers.ofString());
+                    if (authRes.statusCode() != 200) {
+                        return FormValidation.error(
+                                "Login failed. HTTP " + authRes.statusCode() + ": " + authRes.body());
+                    }
+                    java.util.regex.Matcher m =
+                            java.util.regex.Pattern.compile("\"token\"\\s*:\\s*\"([^\"]+)\"")
+                                    .matcher(authRes.body());
+                    if (!m.find()) {
+                        return FormValidation.error("Login succeeded but no 'token' field in response.");
+                    }
+                    String token = m.group(1);
+
+                    // Step 2: validate token
+                    String validateBody = "{\"token\":\"" + token.replace("\"", "\\\"") + "\"}";
+                    HttpRequest valReq = HttpRequest.newBuilder()
+                            .uri(URI.create(base + "api/v1/auth/token/validate"))
+                            .header("Content-Type", "application/json")
+                            .header("Accept", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(validateBody))
+                            .build();
+                    HttpResponse<String> valRes = client.send(valReq, HttpResponse.BodyHandlers.ofString());
+                    if (valRes.statusCode() == 200 && valRes.body() != null
+                            && valRes.body().contains("\"valid\":true")) {
+                        return FormValidation.ok("Connected");
+                    } else {
+                        return FormValidation.error(
+                                "Token validation failed. HTTP " + valRes.statusCode() + ": " + valRes.body());
+                    }
+                } catch (IOException | IllegalArgumentException e) {
+                    return FormValidation.error("Connection error: " + e.getMessage());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return FormValidation.error("Connection interrupted");
+                }
             }
 
-            try {
-                String urlText = serviceUrl;
-                if (!urlText.endsWith("/")) {
-                    urlText += "/";
-                }
-                urlText += "api/v1/health/system?full=true";
-
-                HttpClient client = HttpClient.newBuilder()
-                        .connectTimeout(Duration.ofSeconds(10))
-                        .build();
-
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(urlText))
-                        .header("Authorization", "Bearer " + token)
-                        .GET()
-                        .build();
-
-                HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-                if (response.statusCode() == 200) {
-                    return FormValidation.ok("Connected");
-                } else {
-                    return FormValidation.error("Failed to connect. HTTP Status: " + response.statusCode());
-                }
-            } catch (IOException | IllegalArgumentException e) {
-                return FormValidation.error("Connection error: " + e.getMessage());
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return FormValidation.error("Connection interrupted");
-            }
+            return FormValidation.error(
+                    "Credentials '" + credentialsId + "' not found. Configure a 'Secret text' "
+                            + "(API key) or 'Username with password' credential.");
         }
 
     }
