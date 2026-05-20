@@ -17,9 +17,9 @@ When Jenkins detects queued work for a matching label, the plugin requests a VM,
   - [Usage](#usage)
     - [Create a cloud](#create-a-cloud)
     - [Configure a template](#configure-a-template)
+      - [Advanced SSH settings](#advanced-ssh-settings)
       - [Clone existing VM](#clone-existing-vm)
       - [Create from catalog](#create-from-catalog)
-    - [Advanced SSH settings](#advanced-ssh-settings)
     - [Run jobs on provisioned agents](#run-jobs-on-provisioned-agents)
   - [Configuration as Code](#configuration-as-code)
   - [Behavior and troubleshooting](#behavior-and-troubleshooting)
@@ -104,35 +104,7 @@ At the template level, configure:
 
 ![Template configuration](docs/images/template-label.png)
 
-The plugin supports two provisioning modes.
-
-#### Clone existing VM
-
-Use this mode when you already have a prepared VM on a Parallels DevOps host and want Jenkins to clone it per build.
-
-Required field:
-
-- `Base VM Name or VM ID`
-
-This is usually the simplest path when you maintain your own golden images on a host.
-
-#### Create from catalog
-
-Use this mode when your images come from a Parallels catalog.
-
-Typical fields include:
-
-- `Architecture`
-- `Catalog ID`
-- `Catalog Version`
-- `Catalog URL`
-- `Catalog Credentials`
-
-This is the better fit when you want centrally managed images and orchestrated provisioning.
-
-![Catalog-based provisioning template](docs/images/catalog-based.png)
-
-### Advanced SSH settings
+#### Advanced SSH settings
 
 Expand **Advanced** on the template to tune agent bootstrap behavior.
 
@@ -152,6 +124,35 @@ These settings are useful when:
 - Java is not on the default path
 - the VM needs extra time after boot before SSH is ready
 - the remoting JVM requires extra options
+
+The plugin supports two provisioning modes.
+
+#### Clone existing VM
+
+Use this mode when you already have a prepared VM on a Parallels DevOps host and want Jenkins to clone it per build.
+
+Required field:
+
+- `Base VM Name or VM ID`
+
+This is usually the simplest path when you maintain your own golden images on a host.
+
+#### Create from catalog
+
+Use this mode when your images come from a Parallels catalog. [Learn more](https://parallels.github.io/prl-devops-service/docs/devops/catalog/overview/)
+
+Typical fields include:
+
+- `Architecture`
+- `Catalog ID`
+- `Catalog Version`
+- `Catalog URL`
+- `Catalog Credentials`
+
+This is the better fit when you want centrally managed images and orchestrated provisioning.
+
+![Catalog-based provisioning template](docs/images/catalog-based.png)
+
 
 ### Run jobs on provisioned agents
 

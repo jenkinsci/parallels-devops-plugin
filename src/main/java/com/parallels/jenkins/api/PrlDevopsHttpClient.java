@@ -52,14 +52,16 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
     private static final String CONTENT_TYPE_JSON = "application/json";
 
     private final String baseUrl;
-    private final Secret bearerToken;
+    private final String authHeaderName;
+    private final Secret authHeaderValue;
     private final ConnectionMode mode;
     private final HttpClient httpClient;
     private final ObjectMapper mapper;
 
     private PrlDevopsHttpClient(Builder builder) {
         this.baseUrl = stripTrailingSlash(builder.baseUrl);
-        this.bearerToken = Secret.fromString(Secret.toString(builder.bearerToken));
+        this.authHeaderName = builder.authHeaderName;
+        this.authHeaderValue = Secret.fromString(Secret.toString(builder.authHeaderValue));
         this.mode = builder.mode;
         this.httpClient = builder.httpClient != null
                 ? builder.httpClient
@@ -80,7 +82,7 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
                 HttpRequest.newBuilder()
                         .uri(toUri(path))
                         .header("Content-Type", CONTENT_TYPE_JSON)
-                        .header("Authorization", "Bearer " + bearerToken.getPlainText())
+                        .header(authHeaderName, authHeaderValue.getPlainText())
                         .PUT(HttpRequest.BodyPublishers.ofString(body))
                         .build());
         requireSuccessful(response);
@@ -97,7 +99,7 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
                 HttpRequest.newBuilder()
                         .uri(toUri(path))
                         .header("Content-Type", CONTENT_TYPE_JSON)
-                        .header("Authorization", "Bearer " + bearerToken.getPlainText())
+                        .header(authHeaderName, authHeaderValue.getPlainText())
                         .POST(HttpRequest.BodyPublishers.ofString(body))
                         .build());
         requireSuccessful(response);
@@ -110,7 +112,7 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
         HttpResponse<String> response = send(
                 HttpRequest.newBuilder()
                         .uri(toUri(path))
-                        .header("Authorization", "Bearer " + bearerToken.getPlainText())
+                        .header(authHeaderName, authHeaderValue.getPlainText())
                         .GET()
                         .build());
         requireSuccessful(response);
@@ -123,7 +125,7 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
         HttpResponse<String> response = send(
                 HttpRequest.newBuilder()
                         .uri(toUri(path))
-                        .header("Authorization", "Bearer " + bearerToken.getPlainText())
+                        .header(authHeaderName, authHeaderValue.getPlainText())
                         .GET()
                         .build());
         requireSuccessful(response);
@@ -135,7 +137,7 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
         HttpResponse<String> response = send(
                 HttpRequest.newBuilder()
                         .uri(toUri(path))
-                        .header("Authorization", "Bearer " + bearerToken.getPlainText())
+                        .header(authHeaderName, authHeaderValue.getPlainText())
                         .DELETE()
                         .build());
         requireSuccessful(response);
@@ -149,7 +151,7 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
                 HttpRequest.newBuilder()
                         .uri(toUri(path))
                         .header("Content-Type", CONTENT_TYPE_JSON)
-                        .header("Authorization", "Bearer " + bearerToken.getPlainText())
+                        .header(authHeaderName, authHeaderValue.getPlainText())
                         .PUT(HttpRequest.BodyPublishers.ofString(body))
                         .build());
         requireSuccessful(response);
@@ -316,7 +318,8 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
     public static final class Builder {
 
         private String baseUrl;
-        private Secret bearerToken;
+        private String authHeaderName;
+        private Secret authHeaderValue;
         private ConnectionMode mode = ConnectionMode.HOST;
         /** Allows injection of a custom HttpClient (primarily for testing). */
         HttpClient httpClient;
@@ -326,8 +329,17 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
             return this;
         }
 
-        public Builder bearerToken(String bearerToken) {
-            this.bearerToken = Secret.fromString(bearerToken);
+        /** Use for username+password auth: sends {@code Authorization: Bearer <token>}. */
+        public Builder bearerToken(String token) {
+            this.authHeaderName = "Authorization";
+            this.authHeaderValue = Secret.fromString("Bearer " + token);
+            return this;
+        }
+
+        /** Use for API key auth: sends {@code X-API-Key: <encoded>}. */
+        public Builder apiKey(String encoded) {
+            this.authHeaderName = "X-API-Key";
+            this.authHeaderValue = Secret.fromString(encoded);
             return this;
         }
 
@@ -346,8 +358,10 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
             if (baseUrl == null || baseUrl.isBlank()) {
                 throw new IllegalStateException("baseUrl must be set");
             }
-            if (bearerToken == null || bearerToken.getPlainText().isBlank()) {
-                throw new IllegalStateException("bearerToken must be set");
+            if (authHeaderName == null || authHeaderValue == null
+                    || authHeaderValue.getPlainText().isBlank()) {
+                throw new IllegalStateException(
+                        "Either bearerToken() or apiKey() must be called before build()");
             }
             return new PrlDevopsHttpClient(this);
         }
