@@ -54,6 +54,8 @@ public class PrlDevopsComputerLauncher extends ComputerLauncher {
     int getSshRetries() { return sshRetries; }
     int getSshRetryDelaySec() { return sshRetryDelaySec; }
     boolean hasExhaustedRetries() { return launchExhaustedRetries; }
+    /** Simulates exhausted SSH retries in tests without triggering a real SSH attempt. */
+    void markRetryExhausted() { this.launchExhaustedRetries = true; }
 
     @Override
     public void launch(SlaveComputer computer, TaskListener listener) throws IOException {

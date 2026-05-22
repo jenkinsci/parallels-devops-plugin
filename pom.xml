@@ -115,6 +115,23 @@
                     <host>0.0.0.0</host>
                 </configuration>
             </plugin>
+            <!--
+              Failsafe runs classes matching *IT.java during the integration-test phase
+              (i.e. mvn verify). Skip integration tests locally with -DskipITs.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.5.3</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 
