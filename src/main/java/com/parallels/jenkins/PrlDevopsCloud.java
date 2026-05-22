@@ -1,7 +1,6 @@
 package com.parallels.jenkins;
 
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
-import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
 import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -247,20 +246,14 @@ public class PrlDevopsCloud extends Cloud {
                 .mode(connectionMode != null ? connectionMode : ConnectionMode.HOST);
 
         // API key (Secret Text) — use X-API-Key header directly
-        StringCredentials sc = CredentialsMatchers.firstOrNull(
-                CredentialsProvider.lookupCredentials(
-                        StringCredentials.class, Jenkins.get(), ACL.SYSTEM, Collections.emptyList()),
-                CredentialsMatchers.withId(credentialsId));
+        StringCredentials sc = CredentialsHelper.findStringCredential(credentialsId, Jenkins.get());
         if (sc != null) {
             return builder.apiKey(sc.getSecret().getPlainText()).build();
         }
 
         // Username + Password — exchange for a JWT Bearer token
-        StandardUsernamePasswordCredentials upc = CredentialsMatchers.firstOrNull(
-                CredentialsProvider.lookupCredentials(
-                        StandardUsernamePasswordCredentials.class,
-                        Jenkins.get(), ACL.SYSTEM, Collections.emptyList()),
-                CredentialsMatchers.withId(credentialsId));
+        StandardUsernamePasswordCredentials upc =
+                CredentialsHelper.findUsernamePasswordCredential(credentialsId, Jenkins.get());
         if (upc != null) {
             return builder.bearerToken(fetchTokenWithPassword(upc)).build();
         }
@@ -552,10 +545,7 @@ public class PrlDevopsCloud extends Cloud {
             HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
             // --- API Key (Secret Text) — test with X-API-Key on a protected endpoint ---
-            StringCredentials sc = CredentialsMatchers.firstOrNull(
-                    CredentialsProvider.lookupCredentials(
-                            StringCredentials.class, Jenkins.get(), ACL.SYSTEM, Collections.emptyList()),
-                    CredentialsMatchers.withId(credentialsId));
+            StringCredentials sc = CredentialsHelper.findStringCredential(credentialsId, Jenkins.get());
             if (sc != null) {
                 try {
                     HttpRequest req = HttpRequest.newBuilder()
@@ -581,11 +571,8 @@ public class PrlDevopsCloud extends Cloud {
             }
 
             // --- Username + Password — exchange for JWT then validate it ---
-            StandardUsernamePasswordCredentials upc = CredentialsMatchers.firstOrNull(
-                    CredentialsProvider.lookupCredentials(
-                            StandardUsernamePasswordCredentials.class,
-                            Jenkins.get(), ACL.SYSTEM, Collections.emptyList()),
-                    CredentialsMatchers.withId(credentialsId));
+            StandardUsernamePasswordCredentials upc =
+                    CredentialsHelper.findUsernamePasswordCredential(credentialsId, Jenkins.get());
             if (upc != null) {
                 try {
                     // Step 1: get token

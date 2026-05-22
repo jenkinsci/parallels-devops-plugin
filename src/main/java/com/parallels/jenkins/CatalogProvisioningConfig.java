@@ -1,7 +1,6 @@
 package com.parallels.jenkins;
 
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
-import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
 import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
 import com.parallels.jenkins.api.PrlDevopsApiClient;
@@ -115,14 +114,10 @@ public final class CatalogProvisioningConfig extends ProvisioningConfig {
             throw new PrlApiException("Catalog URL is not configured on the template");
         }
 
-        StandardUsernamePasswordCredentials cred = CredentialsMatchers.firstOrNull(
-                CredentialsProvider.lookupCredentials(
-                        StandardUsernamePasswordCredentials.class,
-                        Jenkins.get(),
-                        ACL.SYSTEM,
-                        Collections.emptyList()),
-                CredentialsMatchers.withId(credId));
-        if (cred == null) {
+        StandardUsernamePasswordCredentials cred;
+        try {
+            cred = CredentialsHelper.requireUsernamePasswordCredential(credId, Jenkins.get());
+        } catch (CredentialsNotFoundException e) {
             throw new PrlApiException("Catalog credentials '" + credId + "' not found");
         }
 
