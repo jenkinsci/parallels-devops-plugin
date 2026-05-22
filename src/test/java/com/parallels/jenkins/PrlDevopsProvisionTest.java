@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -51,7 +52,7 @@ class PrlDevopsProvisionTest {
         }
 
         @Override
-        public CloneResponse cloneVm(String sourceVmId, CloneRequest request) {
+        public CloneResponse cloneVm(String sourceVmId, CloneRequest request) throws PrlApiException {
             CloneResponse resp = new CloneResponse();
             resp.setId(vmId);
             resp.setStatus("created");
@@ -193,7 +194,7 @@ class PrlDevopsProvisionTest {
             private int counter = 0;
 
             @Override
-            public CloneResponse cloneVm(String sourceVmId, CloneRequest request) {
+            public CloneResponse cloneVm(String sourceVmId, CloneRequest request) throws PrlApiException {
                 CloneResponse r = new CloneResponse();
                 r.setId("vm-multi-" + (++counter));
                 r.setStatus("created");
@@ -249,25 +250,26 @@ class PrlDevopsProvisionTest {
 
     @Test
     void provision_capsToMaxAgents_whenBudgetIsLessThanExcessWorkload(JenkinsRule r) {
+        AtomicInteger cloneCallCount = new AtomicInteger(0);
         StubApiClient stub = new StubApiClient("vm-ltd", "1.2.3.5") {
-            private int counter = 0;
-
             @Override
-            public CloneResponse cloneVm(String sourceVmId, CloneRequest request) {
-                CloneResponse r = new CloneResponse();
-                r.setId("vm-ltd-" + (++counter));
-                r.setStatus("created");
-                return r;
+            public CloneResponse cloneVm(String sourceVmId, CloneRequest request) throws PrlApiException {
+                int n = cloneCallCount.incrementAndGet();
+                CloneResponse resp = new CloneResponse();
+                resp.setId("vm-ltd-" + n);
+                resp.setStatus("created");
+                return resp;
             }
         };
 
-        TestableCloud cloud = buildCloud("PrlLtdCloud", stub, 2); // maxAgents = 2
+        // maxAgents = 3, excessWorkload = 10 → at most 3 clone calls and 3 planned nodes
+        TestableCloud cloud = buildCloud("PrlLtdCloud", stub, 3);
 
-        // excessWorkload = 5, but maxAgents = 2 → expect only 2 planned nodes
         Collection<NodeProvisioner.PlannedNode> nodes =
-                cloud.provision(new Cloud.CloudState(Label.get("macos-sonoma"), 1), 5);
+                cloud.provision(new Cloud.CloudState(Label.get("macos-sonoma"), 1), 10);
 
-        assertEquals(2, nodes.size());
+        assertEquals(3, nodes.size(), "Expected exactly 3 planned nodes (maxAgents cap)");
+        assertEquals(3, cloneCallCount.get(), "Expected exactly 3 clone API calls (maxAgents cap)");
     }
 
     // -------------------------------------------------------------------------
@@ -354,5 +356,62 @@ class PrlDevopsProvisionTest {
                 cloud.provision(new Cloud.CloudState(Label.get("macos-sonoma"), 1), 1);
 
         assertTrue(nodes.isEmpty());
+    }
+
+    // -------------------------------------------------------------------------
+    // Tests — clone API failure
+    // -------------------------------------------------------------------------
+
+    @Test
+    void provision_returnsEmpty_whenCloneApiThrows500(JenkinsRule r) {
+        StubApiClient stub = new StubApiClient("vm-err", "0.0.0.0") {
+            @Override
+            public CloneResponse cloneVm(String sourceVmId, CloneRequest request) throws PrlApiException {
+                throw new PrlApiException(500, "Internal Server Error");
+            }
+        };
+
+        TestableCloud cloud = buildCloud("PrlClone500Cloud", stub, 5);
+
+        // The cloud's provision loop catches PrlApiException and skips the node —
+        // the returned collection should be empty; Jenkins will retry on the next cycle.
+        Collection<NodeProvisioner.PlannedNode> nodes =
+                cloud.provision(new Cloud.CloudState(Label.get("macos-sonoma"), 1), 1);
+
+        assertTrue(nodes.isEmpty(),
+                "Expected empty list when clone API returns 500 so Jenkins can retry next cycle");
+    }
+
+    // -------------------------------------------------------------------------
+    // Tests — SSH exhaustion triggers retention cleanup
+    // -------------------------------------------------------------------------
+
+    @Test
+    void check_callsDeleteVmAndRemovesNode_whenSshRetriesExhausted(JenkinsRule r) throws Exception {
+        StubApiClient stub = new StubApiClient("vm-ssh-fail", "10.0.0.1");
+        TestableCloud cloud = buildCloud("PrlSshFailCloud", stub, 5);
+        r.jenkins.clouds.add(cloud);
+
+        // Provision — future resolves to PrlDevopsAgent
+        Collection<NodeProvisioner.PlannedNode> nodes =
+                cloud.provision(new Cloud.CloudState(Label.get("macos-sonoma"), 1), 1);
+        PrlDevopsAgent agent = (PrlDevopsAgent) nodes.iterator().next().future.get();
+        r.jenkins.addNode(agent);
+
+        // Simulate all SSH retries having been exhausted
+        PrlDevopsComputerLauncher launcher = (PrlDevopsComputerLauncher) agent.getLauncher();
+        launcher.markRetryExhausted();
+
+        PrlDevopsComputer computer = agent.createComputer();
+
+        // Invoke the retention check — should call tearDown immediately
+        new PrlDevopsRetentionStrategy().check(computer);
+
+        // Allow the async disconnect future a brief moment
+        Thread.sleep(300);
+
+        assertTrue(stub.deleteVmCalled, "deleteVm() must be called when SSH retries are exhausted");
+        assertNull(r.jenkins.getNode(agent.getNodeName()),
+                "Node must be removed from Jenkins after SSH exhaustion");
     }
 }
