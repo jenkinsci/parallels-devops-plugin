@@ -81,6 +81,14 @@ public class PrlDevopsRetentionStrategy extends RetentionStrategy<PrlDevopsCompu
                             + " before VM deletion.", e);
         }
 
+        // Mark terminated before calling deleteVm() so that the subsequent
+        // removeNode() → _terminate() callback is a guaranteed no-op.
+        if (!agent.markTerminated()) {
+            LOGGER.fine("[PrlDevops] tearDown: agent " + agent.getNodeName()
+                    + " already marked for termination — skipping duplicate cleanup.");
+            return;
+        }
+
         Jenkins jenkins = Jenkins.get();
         Cloud cloud = jenkins.clouds.getByName(agent.getCloudName());
         if (cloud instanceof PrlDevopsCloud prlCloud) {
