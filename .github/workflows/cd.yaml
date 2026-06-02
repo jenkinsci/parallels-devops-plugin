@@ -12,9 +12,9 @@ on:
           Run validation with release drafter only
           → Skip the release job
         default: false
-  check_run:
+  release:
     types:
-      - completed
+      - published
 
 permissions:
   checks: read
