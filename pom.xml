@@ -12,7 +12,7 @@
 
     <groupId>io.jenkins.plugins</groupId>
     <artifactId>parallels-devops</artifactId>
-    <version>${changelist}</version>
+    <version>${revision}.${changelist}</version>
     <packaging>hpi</packaging>
 
     <name>Parallels DevOps</name>
@@ -27,13 +27,14 @@
     </licenses>
 
     <scm>
-        <connection>scm:git:https://github.com/Parallels/parallels-devops-plugin.git</connection>
-        <developerConnection>scm:git:git@github.com:Parallels/parallels-devops-plugin.git</developerConnection>
-        <url>https://github.com/Parallels/parallels-devops-plugin</url>
+        <connection>scm:git:https://github.com/jenkinsci/parallels-devops-plugin.git</connection>
+        <developerConnection>scm:git:git@github.com:jenkinsci/parallels-devops-plugin.git</developerConnection>
+        <url>https://github.com/jenkinsci/parallels-devops-plugin</url>
         <tag>HEAD</tag>
     </scm>
 
     <properties>
+        <revision>0.1</revision>
         <changelist>999999-SNAPSHOT</changelist>
         <jenkins.baseline>2.528</jenkins.baseline>
         <jenkins.version>${jenkins.baseline}.3</jenkins.version>
