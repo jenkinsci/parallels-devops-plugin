@@ -184,7 +184,7 @@ public class PrlDevopsCloud extends Cloud {
 
         if (toProvision <= 0) {
             LOGGER.fine("[PrlDevops] maxAgents cap reached (active=" + activeAgents
-                    + ", max=" + maxAgents + "). Skipping provisioning.");
+                    + ", max=" + maxAgents + "). Skipping provisioning. Please check the max agents setting in cloud configuration.");
             return Collections.emptyList();
         }
 
