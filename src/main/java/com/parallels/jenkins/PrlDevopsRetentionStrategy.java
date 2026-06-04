@@ -26,7 +26,7 @@ public class PrlDevopsRetentionStrategy extends RetentionStrategy<PrlDevopsCompu
         if (!computer.hasAcceptedTask()) {
             if (hasExhaustedBootstrapRetries(computer)) {
                 computer.setAcceptingTasks(false);
-                tearDown(computer, "SSH bootstrap exhausted configured retries");
+                tearDown(computer, "Inbound agent bootstrap failed");
                 return 1;
             }
             if (!computer.isOnline() && !computer.isConnecting()) {
@@ -60,7 +60,7 @@ public class PrlDevopsRetentionStrategy extends RetentionStrategy<PrlDevopsCompu
         PrlDevopsAgent agent = computer.getNode();
         return agent != null
                 && agent.getLauncher() instanceof PrlDevopsComputerLauncher launcher
-                && launcher.hasExhaustedRetries();
+                && launcher.hasLaunchFailed();
     }
 
     private void tearDown(PrlDevopsComputer computer, String offlineReason) {

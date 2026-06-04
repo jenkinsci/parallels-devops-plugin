@@ -73,10 +73,6 @@
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>jackson2-api</artifactId>
         </dependency>
-        <dependency>
-            <groupId>org.jenkins-ci.plugins</groupId>
-            <artifactId>ssh-slaves</artifactId>
-        </dependency>
         <!-- MockWebServer for unit tests — no live API calls -->
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>

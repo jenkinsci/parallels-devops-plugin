@@ -130,7 +130,6 @@ class PrlDevopsProvisionTest {
     private TestableCloud buildCloud(String cloudName, PrlDevopsApiClient client, int maxAgents) {
         AgentTemplate template = new AgentTemplate("macos-sonoma");
         template.setProvisioningConfig(new CloneProvisioningConfig("macOS-Sonoma-base"));
-        template.setSshCredentialsId("ssh-cred");
         template.setNumExecutors(1);
         template.setVmReadyTimeoutSeconds(10);
         template.setVmReadyPollIntervalSeconds(1);
@@ -339,25 +338,6 @@ class PrlDevopsProvisionTest {
         assertFalse(cloud.canProvision(new Cloud.CloudState(Label.get("unknown-os"), 1)));
     }
 
-    @Test
-    void canProvision_returnsFalseWhenTemplateHasNoSshCredentials(JenkinsRule r) {
-        TestableCloud cloud = buildCloud("PrlNoSshCreds", new StubApiClient("v", "i"), 5);
-        cloud.getTemplates().get(0).setSshCredentialsId(" ");
-
-        assertFalse(cloud.canProvision(new Cloud.CloudState(Label.get("macos-sonoma"), 1)));
-    }
-
-    @Test
-    void provision_returnsEmptyWhenTemplateHasNoSshCredentials(JenkinsRule r) {
-        TestableCloud cloud = buildCloud("PrlNoSshCredsProvision", new StubApiClient("v", "i"), 5);
-        cloud.getTemplates().get(0).setSshCredentialsId(null);
-
-        Collection<NodeProvisioner.PlannedNode> nodes =
-                cloud.provision(new Cloud.CloudState(Label.get("macos-sonoma"), 1), 1);
-
-        assertTrue(nodes.isEmpty());
-    }
-
     // -------------------------------------------------------------------------
     // Tests — clone API failure
     // -------------------------------------------------------------------------
@@ -398,9 +378,9 @@ class PrlDevopsProvisionTest {
         PrlDevopsAgent agent = (PrlDevopsAgent) nodes.iterator().next().future.get();
         r.jenkins.addNode(agent);
 
-        // Simulate all SSH retries having been exhausted
+        // Simulate agent launch failure
         PrlDevopsComputerLauncher launcher = (PrlDevopsComputerLauncher) agent.getLauncher();
-        launcher.markRetryExhausted();
+        launcher.markLaunchFailed();
 
         PrlDevopsComputer computer = agent.createComputer();
 
@@ -410,8 +390,8 @@ class PrlDevopsProvisionTest {
         // Allow the async disconnect future a brief moment
         Thread.sleep(300);
 
-        assertTrue(stub.deleteVmCalled, "deleteVm() must be called when SSH retries are exhausted");
+        assertTrue(stub.deleteVmCalled, "deleteVm() must be called when agent launch fails");
         assertNull(r.jenkins.getNode(agent.getNodeName()),
-                "Node must be removed from Jenkins after SSH exhaustion");
+                "Node must be removed from Jenkins after launch failure");
     }
 }
