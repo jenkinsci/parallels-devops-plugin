@@ -145,11 +145,6 @@ public class PrlDevopsCloud extends Cloud {
             LOGGER.warning("[PrlDevops] canProvision: credentials are not configured on cloud '" + name + "'.");
             return false;
         }
-        if (Util.fixEmptyAndTrim(template.getSshCredentialsId()) == null) {
-            LOGGER.warning("[PrlDevops] canProvision: template '" + template.getTemplateLabel()
-                    + "' has no SSH credentials configured.");
-            return false;
-        }
         if (!template.canProvision()) {
             LOGGER.warning("[PrlDevops] canProvision: template '" + template.getTemplateLabel()
                     + "' has no provisioning config (catalog ID / base VM name missing).");
@@ -165,11 +160,6 @@ public class PrlDevopsCloud extends Cloud {
         AgentTemplate template = getTemplateForLabel(label);
         if (template == null) {
             LOGGER.warning("[PrlDevops] No matching template for label: " + label);
-            return Collections.emptyList();
-        }
-        if (Util.fixEmptyAndTrim(template.getSshCredentialsId()) == null) {
-            LOGGER.warning("[PrlDevops] Template '" + template.getTemplateLabel()
-                    + "' has no SSH credentials configured. Skipping provisioning.");
             return Collections.emptyList();
         }
         if (!template.canProvision()) {

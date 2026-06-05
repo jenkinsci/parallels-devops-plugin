@@ -95,10 +95,10 @@ public class PrlDevopsPlannedNode extends NodeProvisioner.PlannedNode {
                 if (vmIp == null || vmIp.isBlank() || vmIp.equals("-")) {
                     throw new PrlApiException(
                             "VM " + vmId + " is running but ip_configured is '" + vmIp
-                            + "' — cannot SSH. Check that Parallels Tools are installed in the VM.");
+                            + "' — cannot determine VM IP. Check that Parallels Tools are installed in the VM.");
                 }
                 LOGGER.fine("[PrlDevops] VM " + vmId + " is running at " + vmIp + " — registering agent.");
-                return new PrlDevopsAgent(cloudName, template, vmId, vmIp);
+                return new PrlDevopsAgent(cloudName, template, vmId, vmIp, apiClient);
             } catch (PrlApiException | Descriptor.FormException | IOException e) {
                 LOGGER.log(Level.WARNING,
                         "[PrlDevops] VM " + vmId + " failed to become ready; cleaning up. " + e.getMessage(), e);
@@ -106,9 +106,8 @@ public class PrlDevopsPlannedNode extends NodeProvisioner.PlannedNode {
                     apiClient.deleteVm(vmId);
                     LOGGER.fine("[PrlDevops] Successfully deleted orphaned VM " + vmId);
                 } catch (PrlApiException cleanupEx) {
-                    LOGGER.log(Level.WARNING,
-                            "[PrlDevops] Could not delete orphaned VM " + vmId + ": " + cleanupEx.getMessage(),
-                            cleanupEx);
+                    LOGGER.log(Level.WARNING, "[PrlDevops] Could not delete orphaned VM " + vmId
+                            + ": " + cleanupEx.getMessage(), cleanupEx);
                 }
                 throw e;
             }

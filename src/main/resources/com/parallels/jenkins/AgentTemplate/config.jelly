@@ -1,11 +1,12 @@
 <?jelly escape-by-default='true'?>
-<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:c="/lib/credentials">
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form">
     <f:block>
         <f:entry title="Template Label" field="templateLabel">
             <f:textbox />
         </f:entry>
-        <f:entry title="SSH Credentials" field="sshCredentialsId">
-            <c:select />
+        <f:entry title="VM User" field="vmUser">
+            <f:textbox placeholder="parallels" 
+                       description="OS user account for running bootstrap commands via execute API. Leave empty to use VM default." />
         </f:entry>
         <f:entry title="Agent Workspace Directory" field="agentWorkspaceDir">
             <f:textbox default="/tmp/jenkins-agent"
@@ -14,27 +15,23 @@
 
         <f:dropdownDescriptorSelector title="Provisioning Mode" field="provisioningConfig" />
         <f:entry title="VM Ready Timeout (s)" field="vmReadyTimeoutSeconds">
-            <f:number default="600" min="30" description="How long to wait (in seconds) for the VM to boot and become SSH-ready after creation. Increase if your catalog image takes longer to download." />
+            <f:number default="600" min="30" description="How long to wait (in seconds) for the VM to boot and become ready after creation. Increase if your catalog image takes longer to download." />
         </f:entry>
         <f:entry title="VM Ready Poll Interval (s)" field="vmReadyPollIntervalSeconds">
             <f:number default="10" min="5" description="How often (in seconds) to poll the prl-devops-service for VM status while waiting for it to start." />
         </f:entry>
 
         <f:advanced>
-            <f:entry title="SSH Port" field="sshPort">
-                <f:number default="22" min="1" max="65535" />
+            <f:entry title="Agent Connection Timeout (s)" field="agentConnectionTimeoutSec">
+                <f:number default="300" min="30" description="Maximum time to wait for the inbound agent to connect to Jenkins after starting agent.jar." />
             </f:entry>
             <f:entry title="Java Path" field="javaPath">
-                <f:textbox default="java" placeholder="java" />
+                <f:textbox default="java" placeholder="java" 
+                           description="Path to Java executable on the VM (e.g., /usr/lib/jvm/java-17/bin/java). Leave as 'java' to use system default." />
             </f:entry>
             <f:entry title="JVM Options" field="jvmOptions">
-                <f:textbox placeholder="-Xmx512m" />
-            </f:entry>
-            <f:entry title="SSH Retries" field="sshRetries">
-                <f:number default="5" min="1" />
-            </f:entry>
-            <f:entry title="SSH Retry Delay (seconds)" field="sshRetryDelaySec">
-                <f:number default="15" min="1" />
+                <f:textbox placeholder="-Xmx512m" 
+                           description="Extra JVM flags for the agent process (e.g., -Xmx512m for memory limit)." />
             </f:entry>
         </f:advanced>
         <f:repeatableDeleteButton />

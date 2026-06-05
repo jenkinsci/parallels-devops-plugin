@@ -1,58 +1,51 @@
 package com.parallels.jenkins;
 
-import hudson.plugins.sshslaves.SSHLauncher;
-import hudson.plugins.sshslaves.verifiers.NonVerifyingKeyVerificationStrategy;
+import com.parallels.jenkins.api.PrlDevopsHttpClient;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class PrlDevopsRetentionStrategyTest {
 
     @Test
-    void launcherUsesTemplateSshSettings() {
+    void launcherUsesTemplateSettings() {
         AgentTemplate template = new AgentTemplate("test-label");
-        template.setSshCredentialsId("ssh-cred");
-        template.setSshPort(2222);
+        template.setVmUser("testuser");
         template.setJavaPath("/usr/bin/java");
         template.setJvmOptions("-Xmx512m");
-        template.setSshRetries(7);
-        template.setSshRetryDelaySec(11);
+        template.setAgentConnectionTimeoutSec(600);
 
-        PrlDevopsComputerLauncher launcher = new PrlDevopsComputerLauncher("10.0.0.10", template);
+        // Create a stub client (won't be used in this test)
+        PrlDevopsHttpClient stubClient = new PrlDevopsHttpClient.Builder()
+                .baseUrl("http://localhost:8080")
+                .bearerToken("test-token")
+                .build();
 
-        assertEquals("10.0.0.10", launcher.getVmIp());
-        assertEquals("ssh-cred", launcher.getSshCredentialsId());
-        assertEquals(2222, launcher.getSshPort());
-        assertEquals(7, launcher.getSshRetries());
-        assertEquals(11, launcher.getSshRetryDelaySec());
-        assertFalse(launcher.hasExhaustedRetries());
+        PrlDevopsComputerLauncher launcher = new PrlDevopsComputerLauncher(
+                "test-cloud", "vm-12345", "testuser", stubClient, template);
+
+        assertEquals("vm-12345", launcher.getVmId());
+        assertEquals("testuser", launcher.getVmUser());
+        assertEquals(600, launcher.getAgentConnectionTimeoutSec());
+        assertFalse(launcher.hasLaunchFailed());
     }
 
     @Test
-    void launcherBuildsSshLauncherWithReviewSafeDefaults() {
+    void launcherConfiguresConnectionTimeout() {
         AgentTemplate template = new AgentTemplate("test-label");
-        template.setSshCredentialsId("ssh-cred");
-        template.setSshPort(2222);
-        template.setJavaPath("/usr/bin/java");
-        template.setJvmOptions("-Xmx512m");
-        template.setSshRetries(7);
-        template.setSshRetryDelaySec(11);
+        template.setAgentConnectionTimeoutSec(300);
 
-        PrlDevopsComputerLauncher launcher = new PrlDevopsComputerLauncher("10.0.0.10", template);
-        SSHLauncher sshLauncher = launcher.buildSshLauncher();
+        PrlDevopsHttpClient stubClient = new PrlDevopsHttpClient.Builder()
+                .baseUrl("http://localhost:8080")
+                .bearerToken("test-token")
+                .build();
 
-        assertEquals("10.0.0.10", sshLauncher.getHost());
-        assertEquals(2222, sshLauncher.getPort());
-        assertEquals("ssh-cred", sshLauncher.getCredentialsId());
-        assertEquals("/usr/bin/java", sshLauncher.getJavaPath());
-        assertEquals("-Xmx512m", sshLauncher.getJvmOptions());
-        assertEquals(7, sshLauncher.getMaxNumRetries());
-        assertEquals(11, sshLauncher.getRetryWaitTime());
-        assertInstanceOf(NonVerifyingKeyVerificationStrategy.class,
-                sshLauncher.getSshHostKeyVerificationStrategy());
+        PrlDevopsComputerLauncher launcher = new PrlDevopsComputerLauncher(
+                "test-cloud", "vm-99999", "parallels", stubClient, template);
+
+        assertEquals(300, launcher.getAgentConnectionTimeoutSec());
     }
 
     @Test

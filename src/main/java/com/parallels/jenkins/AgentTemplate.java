@@ -1,27 +1,15 @@
 package com.parallels.jenkins;
 
-import com.cloudbees.plugins.credentials.CredentialsMatchers;
-import com.cloudbees.plugins.credentials.CredentialsProvider;
-import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
-import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import hudson.Extension;
-import hudson.Util;
 import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
 import hudson.model.Label;
-import hudson.security.ACL;
-import hudson.util.FormValidation;
-import hudson.util.ListBoxModel;
-import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
-import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest2;
-import org.kohsuke.stapler.verb.POST;
 
 import java.io.Serializable;
-import java.util.Collections;
 
 /**
  * Per-VM-type configuration. One {@code AgentTemplate} maps to one VM type in
@@ -41,18 +29,12 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
     private final String templateLabel;
     /** OS user account used to run commands on the VM via the execute API. */
     private String vmUser = DEFAULT_VM_USER;
-    /** Jenkins credentials ID for SSH agent bootstrap (username + password or key). */
-    private String sshCredentialsId;
-    /** SSH port on the cloned VM (default 22). */
-    private int sshPort = 22;
     /** Path to Java on the agent VM (default: {@code java}). */
     private String javaPath = "java";
-    /** Extra JVM flags passed to the remoting process. */
+    /** Extra JVM flags passed to the inbound agent remoting process. */
     private String jvmOptions = "";
-    /** Maximum SSH connection attempts before marking the node offline (default 5). */
-    private int sshRetries = 5;
-    /** Seconds to wait between SSH retry attempts (default 15). */
-    private int sshRetryDelaySec = 15;
+    /** Connection timeout for inbound agent to connect to Jenkins controller (seconds). */
+    private int agentConnectionTimeoutSec = 300;
     /**
      * Filesystem path used as the Jenkins agent workspace on the provisioned VM.
      * Defaults to {@code /tmp/jenkins-agent} for compatibility with existing test images.
@@ -60,7 +42,7 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
      */
     private String agentWorkspaceDir = DEFAULT_AGENT_WORKSPACE_DIR;
     private int numExecutors = ONE_SHOT_EXECUTORS;
-    private int vmReadyTimeoutSeconds = 600;  // 10 min — covers VM boot + SSH readiness after creation
+    private int vmReadyTimeoutSeconds = 600;  // 10 min — covers VM boot + agent readiness after creation
     private int vmReadyPollIntervalSeconds = 10;
 
     /**
@@ -84,12 +66,9 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
 
     public String getTemplateLabel() { return templateLabel; }
     public String getVmUser() { return vmUser; }
-    public String getSshCredentialsId() { return sshCredentialsId; }
-    public int getSshPort() { return sshPort; }
     public String getJavaPath() { return javaPath; }
     public String getJvmOptions() { return jvmOptions; }
-    public int getSshRetries() { return sshRetries; }
-    public int getSshRetryDelaySec() { return sshRetryDelaySec; }
+    public int getAgentConnectionTimeoutSec() { return agentConnectionTimeoutSec; }
     public String getAgentWorkspaceDir() { return agentWorkspaceDir; }
     public int getNumExecutors() { return ONE_SHOT_EXECUTORS; }
     public int getVmReadyTimeoutSeconds() { return vmReadyTimeoutSeconds; }
@@ -131,20 +110,14 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
         if (vmUser == null) {
             vmUser = DEFAULT_VM_USER;
         }
-        if (sshPort <= 0) {
-            sshPort = 22;
-        }
         if (javaPath == null || javaPath.isBlank()) {
             javaPath = "java";
         }
         if (jvmOptions == null) {
             jvmOptions = "";
         }
-        if (sshRetries <= 0) {
-            sshRetries = 5;
-        }
-        if (sshRetryDelaySec <= 0) {
-            sshRetryDelaySec = 15;
+        if (agentConnectionTimeoutSec <= 0) {
+            agentConnectionTimeoutSec = 300;
         }
         numExecutors = ONE_SHOT_EXECUTORS;
         return this;
@@ -180,13 +153,8 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
     }
 
     @DataBoundSetter
-    public void setSshCredentialsId(String sshCredentialsId) {
-        this.sshCredentialsId = sshCredentialsId;
-    }
-
-    @DataBoundSetter
-    public void setSshPort(int sshPort) {
-        this.sshPort = sshPort > 0 ? sshPort : 22;
+    public void setAgentConnectionTimeoutSec(int agentConnectionTimeoutSec) {
+        this.agentConnectionTimeoutSec = agentConnectionTimeoutSec > 0 ? agentConnectionTimeoutSec : 300;
     }
 
     @DataBoundSetter
@@ -199,15 +167,7 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
         this.jvmOptions = jvmOptions != null ? jvmOptions : "";
     }
 
-    @DataBoundSetter
-    public void setSshRetries(int sshRetries) {
-        this.sshRetries = sshRetries > 0 ? sshRetries : 5;
-    }
 
-    @DataBoundSetter
-    public void setSshRetryDelaySec(int sshRetryDelaySec) {
-        this.sshRetryDelaySec = sshRetryDelaySec > 0 ? sshRetryDelaySec : 15;
-    }
 
     @DataBoundSetter
     public void setAgentWorkspaceDir(String agentWorkspaceDir) {
@@ -257,37 +217,7 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
 
         @Override
         public AgentTemplate newInstance(StaplerRequest2 req, JSONObject formData) throws FormException {
-            AgentTemplate template = (AgentTemplate) super.newInstance(req, formData);
-            if (Util.fixEmptyAndTrim(template.getSshCredentialsId()) == null) {
-                throw new FormException("SSH credentials are required", "sshCredentialsId");
-            }
-            return template;
-        }
-
-        @POST
-        public ListBoxModel doFillSshCredentialsIdItems(@QueryParameter String sshCredentialsId) {
-            Jenkins jenkins = Jenkins.get();
-            if (!jenkins.hasPermission(Jenkins.ADMINISTER)) {
-                return new StandardListBoxModel().includeCurrentValue(sshCredentialsId);
-            }
-            return new StandardListBoxModel()
-                    .includeEmptyValue()
-                    .includeMatchingAs(
-                            ACL.SYSTEM,
-                            jenkins,
-                            StandardUsernameCredentials.class,
-                            Collections.emptyList(),
-                            CredentialsMatchers.always())
-                    .includeCurrentValue(sshCredentialsId);
-        }
-
-        @POST
-        public FormValidation doCheckSshCredentialsId(@QueryParameter String sshCredentialsId) {
-            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
-            if (Util.fixEmptyAndTrim(sshCredentialsId) == null) {
-                return FormValidation.error("SSH credentials are required");
-            }
-            return FormValidation.ok();
+            return (AgentTemplate) super.newInstance(req, formData);
         }
     }
 }

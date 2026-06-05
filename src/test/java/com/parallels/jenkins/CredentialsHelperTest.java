@@ -2,7 +2,6 @@ package com.parallels.jenkins;
 
 import com.cloudbees.plugins.credentials.CredentialsScope;
 import com.cloudbees.plugins.credentials.SystemCredentialsProvider;
-import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
 import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
 import hudson.util.ListBoxModel;
@@ -85,35 +84,6 @@ class CredentialsHelperTest {
     }
 
     // -------------------------------------------------------------------------
-    // requireSshCredential
-    // -------------------------------------------------------------------------
-
-    @Test
-    void requireSshCredential_resolvesUsernamePasswordAsStandardUsernameCredentials(JenkinsRule r)
-            throws Exception {
-        UsernamePasswordCredentialsImpl sshPw = new UsernamePasswordCredentialsImpl(
-                CredentialsScope.GLOBAL, "ssh-pw-cred", "SSH password",
-                "vmuser", "vmpass");
-        SystemCredentialsProvider.getInstance().getCredentials().add(sshPw);
-
-        StandardUsernameCredentials resolved =
-                CredentialsHelper.requireSshCredential("ssh-pw-cred", Jenkins.get());
-
-        assertNotNull(resolved);
-        assertEquals("ssh-pw-cred", resolved.getId());
-        assertEquals("vmuser", resolved.getUsername());
-    }
-
-    @Test
-    void requireSshCredential_throwsForMissingId(JenkinsRule r) {
-        CredentialsNotFoundException ex = assertThrows(
-                CredentialsNotFoundException.class,
-                () -> CredentialsHelper.requireSshCredential("no-ssh-cred", Jenkins.get()));
-
-        assertEquals("no-ssh-cred", ex.getCredentialsId());
-    }
-
-    // -------------------------------------------------------------------------
     // Jelly dropdown filtering — doFillCredentialsIdItems
     // -------------------------------------------------------------------------
 
@@ -141,26 +111,5 @@ class CredentialsHelperTest {
                 "Dropdown should contain the UsernamePassword ID");
     }
 
-    @Test
-    void doFillSshCredentialsIdItems_forAgentTemplate_includesOnlyUsernameCredentials(
-            JenkinsRule r) throws Exception {
-        SystemCredentialsProvider.getInstance().getCredentials().add(
-                new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, "ssh-cred-1", "SSH",
-                        "vm", "secret"));
-        // A StringCredentials should NOT appear in the SSH dropdown
-        SystemCredentialsProvider.getInstance().getCredentials().add(
-                new StringCredentialsImpl(CredentialsScope.GLOBAL, "api-key-1", "API key",
-                        hudson.util.Secret.fromString("key")));
-
-        AgentTemplate.DescriptorImpl descriptor =
-                (AgentTemplate.DescriptorImpl) Jenkins.get()
-                        .getDescriptorOrDie(AgentTemplate.class);
-
-        ListBoxModel items = descriptor.doFillSshCredentialsIdItems("ssh-cred-1");
-
-        assertTrue(items.stream().anyMatch(o -> "ssh-cred-1".equals(o.value)),
-                "SSH dropdown should include username/password credential");
-        assertFalse(items.stream().anyMatch(o -> "api-key-1".equals(o.value)),
-                "SSH dropdown must NOT include StringCredentials");
-    }
+    // SSH credentials test removed - plugin now uses inbound agents instead of SSH
 }
