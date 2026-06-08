@@ -13,6 +13,8 @@
         <f:textbox placeholder="https://devops-catalog.example.com" />
     </f:entry>
     <f:entry title="Catalog Credentials" field="catalogCredentialsId">
-        <c:select />
+        <c:select description="API credentials for catalog access (Secret text for API key or Username with password)" />
     </f:entry>
+    <f:validateButton title="Test Catalog Connection" method="testCatalogConnection"
+                      with="catalogUrl,catalogCredentialsId" />
 </j:jelly>
