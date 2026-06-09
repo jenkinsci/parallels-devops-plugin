@@ -261,4 +261,4 @@ Additional project-specific setup notes are available in [docs/setup-guide.md](d
 
 ## Change log
 
-Releases and changelog entries are published through [GitHub Releases](https://github.com/Parallels/parallels-devops-jenkins-plugin/releases).
+Releases and changelog entries are published through [GitHub Releases](https://github.com/jenkinsci/parallels-devops-plugin/releases).
