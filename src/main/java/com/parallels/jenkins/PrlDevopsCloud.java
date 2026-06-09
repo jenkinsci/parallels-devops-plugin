@@ -469,16 +469,6 @@ public class PrlDevopsCloud extends Cloud {
             if (Util.fixEmptyAndTrim(cloud.getCredentialsId()) == null) {
                 throw new FormException("API credentials are required", "credentialsId");
             }
-            if (cloud.getConnectionMode() == com.parallels.jenkins.api.ConnectionMode.ORCHESTRATOR) {
-                for (AgentTemplate t : cloud.getTemplates()) {
-                    if (t.getProvisioningConfig() instanceof CloneProvisioningConfig) {
-                        throw new FormException(
-                                "Template '" + t.getTemplateLabel() + "': Clone provisioning is not supported "
-                                        + "in Orchestrator mode. Use 'Create from catalog' instead.",
-                                "templates");
-                    }
-                }
-            }
             return cloud;
         }
 
@@ -517,40 +507,41 @@ public class PrlDevopsCloud extends Cloud {
             return FormValidation.ok();
         }
 
-        @POST
-        public FormValidation doTestConnection(
-                @QueryParameter("serviceUrl") String serviceUrl,
-                @QueryParameter("credentialsId") String credentialsId) {
-
-            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
-
+        /**
+         * Helper method to test service connectivity by calling /api/health/probe
+         * with appropriate authentication (API Key or Bearer token).
+         * 
+         * Package-private to allow reuse by CatalogProvisioningConfig.
+         */
+        static FormValidation testServiceConnection(String serviceUrl, String credentialsId, String serviceName) {
             if (Util.fixEmptyAndTrim(serviceUrl) == null) {
                 return FormValidation.error("Service URL is required");
             }
             if (Util.fixEmptyAndTrim(credentialsId) == null) {
-                return FormValidation.error("API credentials are required");
+                return FormValidation.error("Credentials are required");
             }
 
             String base = serviceUrl.endsWith("/") ? serviceUrl : serviceUrl + "/";
             HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
 
-            // --- API Key (Secret Text) — test with X-API-Key on a protected endpoint ---
+            // Try API Key (Secret Text) first — use X-API-Key header
             StringCredentials sc = CredentialsHelper.findStringCredential(credentialsId, Jenkins.get());
             if (sc != null) {
                 try {
                     HttpRequest req = HttpRequest.newBuilder()
-                            .uri(URI.create(base + "api/v1/auth/api_keys"))
+                            .uri(URI.create(base + "api/health/probe"))
                             .header("X-API-Key", sc.getSecret().getPlainText())
                             .header("Accept", "application/json")
                             .GET()
                             .build();
                     HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
+                    
                     if (res.statusCode() == 200) {
-                        return FormValidation.ok("Connected");
+                        return FormValidation.ok(serviceName + " is reachable");
                     } else if (res.statusCode() == 401) {
-                        return FormValidation.error("Authentication failed (401). Check the API key 'encoded' value.");
+                        return FormValidation.error("Authentication failed (401). Check the API key.");
                     } else {
-                        return FormValidation.error("Unexpected response. HTTP " + res.statusCode());
+                        return FormValidation.error(serviceName + " returned HTTP " + res.statusCode());
                     }
                 } catch (IOException | IllegalArgumentException e) {
                     return FormValidation.error("Connection error: " + e.getMessage());
@@ -560,48 +551,49 @@ public class PrlDevopsCloud extends Cloud {
                 }
             }
 
-            // --- Username + Password — exchange for JWT then validate it ---
+            // Try Username + Password — exchange for JWT bearer token
             StandardUsernamePasswordCredentials upc =
                     CredentialsHelper.findUsernamePasswordCredential(credentialsId, Jenkins.get());
             if (upc != null) {
                 try {
-                    // Step 1: get token
-                    String jsonBody = serializeAuthTokenRequest(
-                            upc.getUsername(), upc.getPassword().getPlainText());
+                    // Fetch token
+                    String authUrl = base + "api/v1/auth/token";
+                    String jsonBody = serializeAuthTokenRequest(upc.getUsername(), upc.getPassword().getPlainText());
                     HttpRequest authReq = HttpRequest.newBuilder()
-                            .uri(URI.create(base + "api/v1/auth/token"))
+                            .uri(URI.create(authUrl))
                             .header("Content-Type", "application/json")
                             .header("Accept", "application/json")
                             .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                             .build();
                     HttpResponse<String> authRes = client.send(authReq, HttpResponse.BodyHandlers.ofString());
+                    
                     if (authRes.statusCode() != 200) {
-                        return FormValidation.error(
-                                "Login failed. HTTP " + authRes.statusCode() + ": " + authRes.body());
+                        return FormValidation.error("Failed to get auth token. HTTP " + authRes.statusCode());
                     }
+                    
                     java.util.regex.Matcher m =
                             java.util.regex.Pattern.compile("\"token\"\\s*:\\s*\"([^\"]+)\"")
                                     .matcher(authRes.body());
                     if (!m.find()) {
-                        return FormValidation.error("Login succeeded but no 'token' field in response.");
+                        return FormValidation.error("Auth response did not contain a 'token' field.");
                     }
                     String token = m.group(1);
-
-                    // Step 2: validate token
-                    String validateBody = "{\"token\":\"" + token.replace("\"", "\\\"") + "\"}";
-                    HttpRequest valReq = HttpRequest.newBuilder()
-                            .uri(URI.create(base + "api/v1/auth/token/validate"))
-                            .header("Content-Type", "application/json")
+                    
+                    // Test health probe with token
+                    HttpRequest req = HttpRequest.newBuilder()
+                            .uri(URI.create(base + "api/health/probe"))
+                            .header("Authorization", "Bearer " + token)
                             .header("Accept", "application/json")
-                            .POST(HttpRequest.BodyPublishers.ofString(validateBody))
+                            .GET()
                             .build();
-                    HttpResponse<String> valRes = client.send(valReq, HttpResponse.BodyHandlers.ofString());
-                    if (valRes.statusCode() == 200 && valRes.body() != null
-                            && valRes.body().contains("\"valid\":true")) {
-                        return FormValidation.ok("Connected");
+                    HttpResponse<String> res = client.send(req, HttpResponse.BodyHandlers.ofString());
+                    
+                    if (res.statusCode() == 200) {
+                        return FormValidation.ok(serviceName + " is reachable");
+                    } else if (res.statusCode() == 401) {
+                        return FormValidation.error("Authentication failed (401). Check the credentials.");
                     } else {
-                        return FormValidation.error(
-                                "Token validation failed. HTTP " + valRes.statusCode() + ": " + valRes.body());
+                        return FormValidation.error(serviceName + " returned HTTP " + res.statusCode());
                     }
                 } catch (IOException | IllegalArgumentException e) {
                     return FormValidation.error("Connection error: " + e.getMessage());
@@ -614,6 +606,15 @@ public class PrlDevopsCloud extends Cloud {
             return FormValidation.error(
                     "Credentials '" + credentialsId + "' not found. Configure a 'Secret text' "
                             + "(API key) or 'Username with password' credential.");
+        }
+
+        @POST
+        public FormValidation doTestConnection(
+                @QueryParameter("serviceUrl") String serviceUrl,
+                @QueryParameter("credentialsId") String credentialsId) {
+
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+            return testServiceConnection(serviceUrl, credentialsId, "Service");
         }
 
     }

@@ -18,6 +18,7 @@ import hudson.util.ListBoxModel;
 import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
 import org.jenkinsci.Symbol;
+import org.jenkinsci.plugins.plaincredentials.StringCredentials;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
@@ -165,6 +166,13 @@ public final class CatalogProvisioningConfig extends ProvisioningConfig {
                     .includeMatchingAs(
                             ACL.SYSTEM,
                             jenkins,
+                            StringCredentials.class,
+                            Collections.emptyList(),
+                            CredentialsMatchers.always()
+                    )
+                    .includeMatchingAs(
+                            ACL.SYSTEM,
+                            jenkins,
                             StandardUsernamePasswordCredentials.class,
                             Collections.emptyList(),
                             CredentialsMatchers.always()
@@ -189,6 +197,16 @@ public final class CatalogProvisioningConfig extends ProvisioningConfig {
                 return FormValidation.error("Catalog ID is required");
             }
             return FormValidation.ok();
+        }
+
+        @POST
+        public FormValidation doTestCatalogConnection(
+                @QueryParameter("catalogUrl") String catalogUrl,
+                @QueryParameter("catalogCredentialsId") String catalogCredentialsId) {
+
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+            return PrlDevopsCloud.DescriptorImpl.testServiceConnection(
+                    catalogUrl, catalogCredentialsId, "Catalog service");
         }
     }
 }
