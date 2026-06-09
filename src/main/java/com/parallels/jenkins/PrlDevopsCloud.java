@@ -469,16 +469,6 @@ public class PrlDevopsCloud extends Cloud {
             if (Util.fixEmptyAndTrim(cloud.getCredentialsId()) == null) {
                 throw new FormException("API credentials are required", "credentialsId");
             }
-            if (cloud.getConnectionMode() == com.parallels.jenkins.api.ConnectionMode.ORCHESTRATOR) {
-                for (AgentTemplate t : cloud.getTemplates()) {
-                    if (t.getProvisioningConfig() instanceof CloneProvisioningConfig) {
-                        throw new FormException(
-                                "Template '" + t.getTemplateLabel() + "': Clone provisioning is not supported "
-                                        + "in Orchestrator mode. Use 'Create from catalog' instead.",
-                                "templates");
-                    }
-                }
-            }
             return cloud;
         }
 

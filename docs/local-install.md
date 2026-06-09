@@ -14,7 +14,7 @@ Before you begin, make sure the following are in place:
 | **JDK** | 17 (plugin default) or 21 | [Adoptium](https://adoptium.net/) / `brew install openjdk@17` |
 | **`prl-devops-service`** | Latest stable | Must be running and reachable from the Jenkins host |
 | **Parallels DevOps API credentials** | — | Bearer token or username / password for the service |
-| **SSH credentials** | — | A keypair or username+password that Jenkins can use to reach provisioned VMs |
+| **Jenkins URL configured** | — | Required for VMs to connect back as inbound agents |
 | **A VM source** | — | Either a base VM registered in the service, or a catalog entry |
 
 > **Windows**: use WSL 2 and follow the Linux instructions inside the WSL shell.
@@ -93,7 +93,7 @@ Scroll down to **Agent Templates** and click **Add Template**. Configure:
 | Field | Description |
 |---|---|
 | **Template Label** | Jenkins label that jobs will request, e.g., `macos`, `ubuntu-arm64` |
-| **SSH Credentials** | Credential Jenkins uses to connect to the provisioned VM over SSH |
+| **VM User** | OS user account for running bootstrap commands via execute API (e.g., `parallels`, `ubuntu`) |
 | **Agent Workspace Directory** | Remote path on the VM where Jenkins will run builds, e.g., `/tmp/jenkins` |
 | **Provisioning Mode** | `Clone existing VM` or `Create from catalog` (see below) |
 | **VM Ready Timeout (s)** | Maximum seconds to wait for the VM to become usable (default: 600) |
@@ -122,20 +122,6 @@ Select **Create from catalog** and supply:
 | **Catalog Credentials** | Credential for catalog access (if required) |
 
 ![Catalog-based provisioning template](images/catalog-based.png)
-
-#### Advanced SSH settings
-
-Expand **Advanced** on the template to tune bootstrap behavior:
-
-![Advanced SSH settings](images/cutsom-ssh.png)
-
-| Setting | When to change |
-|---|---|
-| **SSH Port** | Non-default SSH port on the image |
-| **Java Path** | Java is not on the default `PATH` inside the VM |
-| **JVM Options** | Remoting JVM needs extra flags |
-| **SSH Retries** | Image needs more attempts before SSH is ready |
-| **SSH Retry Delay (seconds)** | Image needs extra boot / cloud-init time |
 
 ### Step 4: Test the Configuration
 
@@ -172,7 +158,7 @@ Click **Save** at the bottom of the page. The cloud now appears under **Manage J
 ### Observe the provisioning sequence
 
 1. Open **Dashboard → Manage Jenkins → Nodes**. Within a few seconds a new node named `prl-<uuid>` will appear with status **Launching**.
-2. Click the node name, then **Log** to follow the SSH bootstrap in real time.
+2. Click the node name, then **Log** to follow the agent bootstrap in real time.
 3. Once the node status changes to **Online**, the build will start and the console output will show the `hostname` and `uname` results.
 4. After the build completes, the `prl-<uuid>` node disappears from the Nodes list and the backing VM is removed by the plugin automatically.
 
@@ -238,19 +224,19 @@ pipeline {
 
 ---
 
-### SSH: Connection refused
+### Agent connection timeout
 
-**Symptom**: The node log shows repeated `Connection refused` or `Connection timed out` on port 22.
+**Symptom**: The node log shows `Waiting for agent connection...` repeatedly and eventually times out.
 
-**Diagnosis**: SSH is not yet up on the VM, or it listens on a non-default port.
+**Diagnosis**: The VM cannot connect back to Jenkins as an inbound agent.
 
 **Resolution**:
-1. SSH into the VM manually from the Jenkins host to confirm reachability:
-   ```bash
-   ssh -p <port> <user>@<vm-ip>
-   ```
-2. If SSH is on a non-default port, expand **Advanced** on the template and set **SSH Port** accordingly.
-3. Increase **SSH Retries** and **SSH Retry Delay (seconds)** to give cloud-init more time to start `sshd`.
+1. Verify Jenkins URL is configured correctly in **Manage Jenkins → System → Jenkins Location**.
+2. Ensure the Jenkins URL is accessible from the VM (not `localhost`).
+3. Check firewall rules allow incoming connections to Jenkins port (typically 8080 or 50000).
+4. Review the agent log on the VM: `/tmp/agent.log` for connection errors.
+5. Ensure the VM has `wget`, `curl`, or `python` installed to download agent.jar.
+6. Increase **VM Ready Timeout** if the VM needs more time to boot before the agent can connect.
 
 ---
 
@@ -261,10 +247,10 @@ pipeline {
 **Diagnosis**: Jenkins launched the agent process but it crashed immediately, usually due to a Java issue.
 
 **Resolution**:
-1. Click the node name → **Log** and scroll to the remoting startup output.
+1. Click the node name → **Log** and scroll to the agent startup output.
 2. If you see `java: not found`, set **Java Path** in the template's Advanced section to the full path, e.g., `/usr/lib/jvm/java-17-openjdk/bin/java`.
-3. If you see `OutOfMemoryError`, add `-Xmx256m` (or larger) to **JVM Options**.
-4. Confirm the SSH credential has the correct username for the image.
+3. If you see `OutOfMemoryError`, add `-Xmx256m` (or larger) to **JVM Options** in Advanced settings.
+4. Verify the **VM User** field has the correct username for the image.
 
 ---
 

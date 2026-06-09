@@ -5,7 +5,7 @@
 
 The Parallels DevOps plugin allows Jenkins to start ephemeral macOS, Windows, and Linux build agents on demand through [Parallels DevOps Service](https://parallels.github.io/prl-devops-service/quick-start/).
 
-When Jenkins detects queued work for a matching label, the plugin requests a VM, waits for it to become usable, connects it over SSH, runs the build, and removes the VM again when the one-shot agent is finished.
+When Jenkins detects queued work for a matching label, the plugin provisions a VM, waits for it to become ready, connects it as an inbound Jenkins agent, runs the build, and removes the VM when the one-shot agent is finished.
 
 ## Table of contents
 
@@ -17,7 +17,6 @@ When Jenkins detects queued work for a matching label, the plugin requests a VM,
   - [Usage](#usage)
     - [Create a cloud](#create-a-cloud)
     - [Configure a template](#configure-a-template)
-      - [Advanced SSH settings](#advanced-ssh-settings)
       - [Clone existing VM](#clone-existing-vm)
       - [Create from catalog](#create-from-catalog)
     - [Run jobs on provisioned agents](#run-jobs-on-provisioned-agents)
@@ -38,7 +37,7 @@ Supported workflows include:
 
 - cloning an existing VM from a Parallels DevOps host
 - creating a VM from a Parallels catalog image through an orchestrator
-- connecting the new VM as a Jenkins agent over SSH
+- connecting the new VM as an inbound Jenkins agent (VM connects to Jenkins)
 - removing the VM automatically after a one-shot build completes
 
 The plugin is designed for elastic build fleets where different jobs may need different operating systems, architectures, or golden images.
@@ -49,8 +48,9 @@ The plugin is designed for elastic build fleets where different jobs may need di
 - Support for both `HOST` and `ORCHESTRATOR` connection modes
 - Per-template label routing so jobs can request the right image
 - Two provisioning modes: clone an existing VM or create from catalog
+- Inbound agent architecture (VMs connect TO Jenkins, works through NAT/firewalls)
 - Configurable VM readiness timeout and polling interval
-- Configurable SSH bootstrap settings, including port, Java path, JVM options, and retry behavior
+- Configurable agent bootstrap settings (Java path, JVM options, connection timeout)
 - Automatic cleanup of one-shot agents and their backing VMs
 - Configuration as Code coverage for both clone and catalog setups
 
@@ -60,7 +60,7 @@ Before configuring the plugin in Jenkins, make sure you have:
 
 1. A reachable Parallels DevOps Service endpoint.
 2. Jenkins credentials for the Parallels DevOps API.
-3. Jenkins SSH credentials that Jenkins can use to connect to the provisioned VM.
+3. Jenkins URL configured (Manage Jenkins → System → Jenkins Location) so VMs can connect back to Jenkins.
 4. At least one VM source, either:
      - an existing base VM registered in Parallels DevOps Service, or
      - a Parallels catalog entry that can be used to create a VM.
@@ -96,7 +96,7 @@ Each template represents one type of agent Jenkins may provision.
 At the template level, configure:
 
 - `Template Label`: the Jenkins label that jobs will request
-- `SSH Credentials`: the credential Jenkins uses to connect to the VM
+- `VM User`: OS user account for executing bootstrap commands on the VM
 - `Agent Workspace Directory`: remote workspace path on the agent VM
 - `Provisioning Mode`: choose how the VM is created
 - `VM Ready Timeout (s)`: maximum time to wait for the VM to become usable
@@ -104,26 +104,11 @@ At the template level, configure:
 
 ![Template configuration](docs/images/template-label.png)
 
-#### Advanced SSH settings
+Expand **Advanced** to configure:
 
-Expand **Advanced** on the template to tune agent bootstrap behavior.
-
-![Advanced SSH settings](docs/images/cutsom-ssh.png)
-
-Available settings include:
-
-- `SSH Port`
-- `Java Path`
-- `JVM Options`
-- `SSH Retries`
-- `SSH Retry Delay (seconds)`
-
-These settings are useful when:
-
-- the image exposes SSH on a non-default port
-- Java is not on the default path
-- the VM needs extra time after boot before SSH is ready
-- the remoting JVM requires extra options
+- `Agent Connection Timeout (s)`: maximum time to wait for the inbound agent to connect
+- `Java Path`: path to Java executable on the VM (default: `java`)
+- `JVM Options`: extra JVM flags for the agent process (e.g., `-Xmx512m`)
 
 The plugin supports two provisioning modes.
 
@@ -246,11 +231,11 @@ jenkins:
 
 ### VM is running, but the build is still queued
 
-The build starts only after Jenkins has connected the new VM as an agent. A VM may already exist in Parallels DevOps Service while Jenkins is still:
+The build starts only after the VM has connected to Jenkins as an inbound agent. A VM may already exist in Parallels DevOps Service while Jenkins is still:
 
 - waiting for the VM to report a valid IP address
 - waiting for the guest to become ready
-- retrying SSH bootstrap
+- waiting for the inbound agent to download agent.jar and connect
 
 If this happens, inspect the Jenkins node launch log for the provisioned `prl-...` node.
 

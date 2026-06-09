@@ -6,7 +6,7 @@ Based on everything built so far, here's the full manual test checklist:
 
 **1. Happy path — single build**
 - Queue a job restricted to label `macos-sonoma`
-- Verify in logs: clone → start → wait → ready → SSH → `SUCCESS`
+- Verify in logs: clone → start → wait → ready → agent connects → `SUCCESS`
 - Verify build ran *on the clone* (`$NODE_NAME` = `prl-<uuid>`, not Built-In Node)
 
 **2. Multiple simultaneous builds**
@@ -36,7 +36,7 @@ Based on everything built so far, here's the full manual test checklist:
 - Verify the stale node disappears from Build Executor Status
 
 **6. External VM deletion — while launching**
-- Trigger a build, immediately delete the cloned VM from prl-devops UI before SSH connects
+- Trigger a build, immediately delete the cloned VM from prl-devops UI before the agent connects
 - Node should be stuck at `launching...`
 - Within 60 seconds the reconciler should remove it and re-queue the build
 
@@ -63,7 +63,7 @@ Based on everything built so far, here's the full manual test checklist:
 
 **10. VM ready timeout**
 - Set `VM Ready Timeout` to `30` seconds on the template
-- Trigger a build (VM will likely not be SSH-ready in 30s)
+- Trigger a build (VM will likely not be ready in 30s)
 - Verify log: `failed to become ready`, `Successfully deleted orphaned VM`
 - Verify the partially-booted clone is deleted in prl-devops
 
@@ -97,6 +97,6 @@ Based on everything built so far, here's the full manual test checklist:
 | `Clone requested; VM ID=...` | API returned a vmId |
 | `Starting VM ...` | `startVm()` called |
 | `Waiting for VM ...` | Polling loop started |
-| `VM ... is ready at IP ...` | SSH can now connect |
+| `VM ... is ready at IP ...` | Agent can now connect |
 | `Removing node ... no longer exists` | Reconciler cleaned up a deleted VM |
 | `maxAgents cap reached` | Budget enforcement working |
