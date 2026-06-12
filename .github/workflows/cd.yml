@@ -8,6 +8,10 @@ on:
     types:
       - completed
 
+concurrency:
+  group: cd-release
+  cancel-in-progress: true
+
 permissions:
   contents: write
   pull-requests: write
