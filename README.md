@@ -1,7 +1,7 @@
 # Parallels DevOps
 
-[![CI](https://github.com/Parallels/parallels-devops-jenkins-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/Parallels/parallels-devops-jenkins-plugin/actions/workflows/ci.yml)
-[![Release](https://github.com/Parallels/parallels-devops-jenkins-plugin/actions/workflows/release.yml/badge.svg)](https://github.com/Parallels/parallels-devops-jenkins-plugin/actions/workflows/release.yml)
+[![CI](https://github.com/jenkinsci/parallels-devops-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/jenkinsci/parallels-devops-plugin/actions/workflows/ci.yml)
+[![CD](https://github.com/jenkinsci/parallels-devops-plugin/actions/workflows/cd.yml/badge.svg)](https://github.com/jenkinsci/parallels-devops-plugin/actions/workflows/cd.yml)
 
 The Parallels DevOps plugin allows Jenkins to start ephemeral macOS, Windows, and Linux build agents on demand through [Parallels DevOps Service](https://parallels.github.io/prl-devops-service/quick-start/).
 
