@@ -54,16 +54,12 @@ jobs:
           path: target/*.hpi
           if-no-files-found: error
 
-      - name: Rename .hpi file for release
-        run: |
-          cp target/parallels-devops.hpi target/parallels-devops-${{ steps.version.outputs.VERSION }}.hpi
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.VERSION }}
-          name: Release ${{ steps.version.outputs.VERSION }}
-          files: target/parallels-devops-${{ steps.version.outputs.VERSION }}.hpi
+          name: ${{ steps.version.outputs.VERSION }}
+          files: target/*.hpi
           draft: false
           prerelease: false
           generate_release_notes: true
