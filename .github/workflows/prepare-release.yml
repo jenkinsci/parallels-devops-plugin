@@ -129,7 +129,6 @@ jobs:
             --title "Release ${NEW_VERSION}" \
             --body-file pr_body.md \
             --base main \
-            --head "$BRANCH" \
-            --label "release"
+            --head "$BRANCH" 
           
           echo "✅ Release PR created for version ${NEW_VERSION}"
