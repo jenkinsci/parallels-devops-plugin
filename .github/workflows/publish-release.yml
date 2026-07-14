@@ -46,6 +46,9 @@ jobs:
           EXPECTED_VERSION="${{ steps.version.outputs.VERSION }}"
           ACTUAL_VERSION=$(grep '^version=' target/maven-archiver/pom.properties | cut -d'=' -f2)
           
+          # Remove trailing dot if present (happens when changelist is empty)
+          ACTUAL_VERSION="${ACTUAL_VERSION%.}"
+          
           echo "Expected version: $EXPECTED_VERSION"
           echo "Actual version: $ACTUAL_VERSION"
           
@@ -74,11 +77,21 @@ jobs:
           VERSION="${{ steps.version.outputs.VERSION }}"
           PR_BODY="${{ github.event.pull_request.body }}"
           
+          # Find the actual .hpi file (might have trailing dot in name)
+          HPI_FILE=$(find target -name "parallels-devops*.hpi" -type f)
+          
+          if [ -z "$HPI_FILE" ]; then
+            echo "❌ ERROR: No .hpi file found in target/"
+            exit 1
+          fi
+          
+          echo "Found .hpi file: $HPI_FILE"
+          
           # Create release with PR body as notes and attach .hpi file
           gh release create "v${VERSION}" \
             --title "${VERSION}" \
             --notes "$PR_BODY" \
-            target/parallels-devops.hpi
+            "$HPI_FILE"
           
           echo "✅ GitHub release created: v${VERSION}"
 
