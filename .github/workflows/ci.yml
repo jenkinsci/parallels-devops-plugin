@@ -1,12 +1,14 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
 jobs:
   build:
-    name: Build, Test & Analyse
+    name: Build, Test & Verify
     runs-on: ubuntu-latest
 
     steps:
@@ -20,8 +22,14 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
-      - name: Build, test, and run static analysis
+      - name: Build, test, run static analysis, and package
         run: mvn --batch-mode clean verify
+
+      - name: Extract project version
+        id: version
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Upload JUnit test results
         if: always()
@@ -38,3 +46,10 @@ jobs:
           name: checkstyle-report
           path: target/checkstyle-result.xml
           if-no-files-found: ignore
+
+      - name: Upload .hpi plugin artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: parallels-devops-${{ steps.version.outputs.VERSION }}
+          path: target/*.hpi
+          if-no-files-found: error
