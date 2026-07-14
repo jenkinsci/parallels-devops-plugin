@@ -1,16 +1,42 @@
-# Continuous Delivery - releases to Jenkins Update Center on release PRs
+# Continuous Delivery - releases to Jenkins Update Center on release commits
 name: cd
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches: [main]
   workflow_dispatch:
 
 jobs:
+  check-release:
+    name: Check if Release Commit
+    runs-on: ubuntu-latest
+    outputs:
+      is-release: ${{ steps.check.outputs.is-release }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 10
+      
+      - name: Check if from release branch
+        id: check
+        run: |
+          # Check if the most recent merge was from a release/ branch
+          MERGE_MESSAGE=$(git log -1 --merges --pretty=%s)
+          echo "Merge message: $MERGE_MESSAGE"
+          
+          if [[ "$MERGE_MESSAGE" =~ Merge\ pull\ request.*release/ ]] || [[ "$MERGE_MESSAGE" =~ ^release/ ]]; then
+            echo "is-release=true" >> "$GITHUB_OUTPUT"
+            echo "✅ This is a release commit"
+          else
+            echo "is-release=false" >> "$GITHUB_OUTPUT"
+            echo "ℹ️ This is not a release commit"
+          fi
+
   release:
-    # Only run if PR was merged and came from a release branch
-    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
+    name: Publish to Jenkins Update Center
+    needs: check-release
+    if: needs.check-release.outputs.is-release == 'true' || github.event_name == 'workflow_dispatch'
     uses: jenkins-infra/github-reusable-workflows/.github/workflows/maven-cd.yml@v1
     with:
       validate_only: false
