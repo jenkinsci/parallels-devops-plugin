@@ -1,0 +1,94 @@
+name: Publish Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Create Release
+    # Only run if PR was merged and came from a release branch
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Set up Java 17 (Temurin) with Maven cache
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Extract release version
+        id: version
+        run: |
+          VERSION=$(grep '<revision>' pom.xml | sed 's/.*<revision>\(.*\)<\/revision>.*/\1/')
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release version: $VERSION"
+
+      - name: Build and package plugin
+        run: |
+          # Build with empty changelist to get clean version number
+          mvn --batch-mode clean package -DskipTests -Dchangelist=
+          echo "✅ Plugin built successfully"
+
+      - name: Verify built version
+        run: |
+          EXPECTED_VERSION="${{ steps.version.outputs.VERSION }}"
+          ACTUAL_VERSION=$(grep '^version=' target/maven-archiver/pom.properties | cut -d'=' -f2)
+          
+          echo "Expected version: $EXPECTED_VERSION"
+          echo "Actual version: $ACTUAL_VERSION"
+          
+          if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "❌ ERROR: Version mismatch!"
+            echo "Expected: $EXPECTED_VERSION"
+            echo "Got: $ACTUAL_VERSION"
+            exit 1
+          fi
+          echo "✅ Version verified: $ACTUAL_VERSION"
+
+      - name: Create and push Git tag
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git tag -a "v${VERSION}" -m "Release ${VERSION}"
+          git push origin "v${VERSION}"
+          echo "✅ Created and pushed tag v${VERSION}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          PR_BODY="${{ github.event.pull_request.body }}"
+          
+          # Create release with PR body as notes and attach .hpi file
+          gh release create "v${VERSION}" \
+            --title "${VERSION}" \
+            --notes "$PR_BODY" \
+            target/parallels-devops.hpi
+          
+          echo "✅ GitHub release created: v${VERSION}"
+
+      - name: Summary
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          echo "### 🎉 Release Published!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version**: ${VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "**Tag**: v${VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifact**: parallels-devops.hpi" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "[View Release](https://github.com/${{ github.repository }}/releases/tag/v${VERSION})" >> $GITHUB_STEP_SUMMARY
