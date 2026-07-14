@@ -77,8 +77,8 @@ jobs:
           VERSION="${{ steps.version.outputs.VERSION }}"
           PR_BODY="${{ github.event.pull_request.body }}"
           
-          # Find the actual .hpi file (might have trailing dot in name)
-          HPI_FILE=$(find target -name "parallels-devops*.hpi" -type f)
+          # Find the actual .hpi file
+          HPI_FILE=$(find target -name "parallels-devops*.hpi" -type f | head -n 1)
           
           if [ -z "$HPI_FILE" ]; then
             echo "❌ ERROR: No .hpi file found in target/"
@@ -87,11 +87,16 @@ jobs:
           
           echo "Found .hpi file: $HPI_FILE"
           
-          # Create release with PR body as notes and attach .hpi file
+          # Rename file to include version
+          VERSIONED_HPI="target/parallels-devops-${VERSION}.hpi"
+          cp "$HPI_FILE" "$VERSIONED_HPI"
+          echo "Created versioned file: $VERSIONED_HPI"
+          
+          # Create release with PR body as notes and attach versioned .hpi file
           gh release create "v${VERSION}" \
             --title "${VERSION}" \
             --notes "$PR_BODY" \
-            "$HPI_FILE"
+            "$VERSIONED_HPI"
           
           echo "✅ GitHub release created: v${VERSION}"
 

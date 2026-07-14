@@ -121,9 +121,7 @@ jobs:
           - [ ] CHANGELOG is updated (if applicable)
           - [ ] All tests pass
           - [ ] Documentation is updated (if needed)
-
-          ---
-          **Note**: When this PR is merged to main, a GitHub release will be automatically created.
+          
           EOF
           
           # Replace placeholder
