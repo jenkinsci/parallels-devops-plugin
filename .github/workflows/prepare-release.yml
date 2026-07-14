@@ -85,6 +85,10 @@ jobs:
         run: |
           NEW_VERSION="${{ steps.new.outputs.VERSION }}"
           BRANCH="release/${NEW_VERSION}"
+          
+          # Delete branch if it exists (from failed previous run)
+          git push origin --delete "$BRANCH" 2>/dev/null || true
+          
           git checkout -b "$BRANCH"
           git add pom.xml
           git commit -m "chore: bump version to ${NEW_VERSION}"
