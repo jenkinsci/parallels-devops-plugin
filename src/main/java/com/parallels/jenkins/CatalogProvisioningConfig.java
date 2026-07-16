@@ -93,7 +93,7 @@ public final class CatalogProvisioningConfig extends ProvisioningConfig {
         LOGGER.fine("[PrlDevops] Creating VM from catalog '" + catalogId + "' for label '" + label + "'");
         CreateVmResponse response = apiClient.createVmFromCatalog(request);
         String vmId = response.getId();
-        LOGGER.fine("[PrlDevops] Catalog VM created; VM ID=" + vmId);
+        LOGGER.fine("[PrlDevops] Catalog VM created; with VM ID=" + vmId);
         return new PrlDevopsPlannedNode(
                 cloudName,
                 template,
