@@ -70,7 +70,7 @@ public class PrlDevopsAgent extends AbstractCloudSlave {
         try {
             return prlCloud.buildApiClient();
         } catch (com.parallels.jenkins.api.exception.PrlApiException e) {
-            throw new IOException("[PrlDevops] Failed to build API client for cloud '" + cloudName + "'", e);
+            throw new IOException("[PrlDevops] Failed to build API client for cloud: '" + cloudName + "'", e);
         }
     }
 

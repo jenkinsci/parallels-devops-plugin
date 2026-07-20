@@ -1,112 +1,98 @@
-name: Publish Release
+name: Upload HPI to GitHub Release
 
 on:
   pull_request:
     types: [closed]
-    branches: [main]
-
-permissions:
-  contents: write
+    branches:
+      - main
 
 jobs:
-  publish:
-    name: Create Release
-    # Only run if PR was merged and came from a release branch
+  upload-hpi:
+    name: Upload HPI to GitHub Release
     if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
     runs-on: ubuntu-latest
-
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-        with:
-          ref: main
 
-      - name: Set up Java 17 (Temurin) with Maven cache
+      - name: Set up Java
         uses: actions/setup-java@v5
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: maven
 
-      - name: Extract release version
+      - name: Extract version from branch name
         id: version
         run: |
-          VERSION=$(grep '<revision>' pom.xml | sed 's/.*<revision>\(.*\)<\/revision>.*/\1/')
+          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
+          VERSION="${BRANCH_NAME#release/}"
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Release version: $VERSION"
+          echo "Version: $VERSION"
 
-      - name: Build and package plugin
+      - name: Build plugin with release version
         run: |
-          # Build with empty changelist to get clean version number
-          mvn --batch-mode clean package -DskipTests -Dchangelist=
-          echo "✅ Plugin built successfully"
+          mvn clean package -DskipTests -Dchangelist=
+          echo "Build complete"
 
-      - name: Verify built version
+      - name: Verify and prepare HPI file
+        id: hpi
         run: |
-          EXPECTED_VERSION="${{ steps.version.outputs.VERSION }}"
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          HPI_FILE="target/parallels-devops.hpi"
+          
+          if [ ! -f "$HPI_FILE" ]; then
+            echo "❌ HPI file not found at $HPI_FILE"
+            exit 1
+          fi
+          
+          # Get actual version from pom.properties
           ACTUAL_VERSION=$(grep '^version=' target/maven-archiver/pom.properties | cut -d'=' -f2)
+          ACTUAL_VERSION="${ACTUAL_VERSION%.}"  # Strip trailing dot if present
+          echo "Built version: $ACTUAL_VERSION"
+          echo "Expected version: $VERSION"
           
-          # Remove trailing dot if present (happens when changelist is empty)
-          ACTUAL_VERSION="${ACTUAL_VERSION%.}"
-          
-          echo "Expected version: $EXPECTED_VERSION"
-          echo "Actual version: $ACTUAL_VERSION"
-          
-          if [ "$ACTUAL_VERSION" != "$EXPECTED_VERSION" ]; then
-            echo "❌ ERROR: Version mismatch!"
-            echo "Expected: $EXPECTED_VERSION"
-            echo "Got: $ACTUAL_VERSION"
+          if [ "$ACTUAL_VERSION" != "$VERSION" ]; then
+            echo "❌ Version mismatch! Expected $VERSION but got $ACTUAL_VERSION"
             exit 1
           fi
-          echo "✅ Version verified: $ACTUAL_VERSION"
+          
+          # Copy to versioned filename
+          cp "$HPI_FILE" "target/parallels-devops-${VERSION}.hpi"
+          echo "HPI_PATH=target/parallels-devops-${VERSION}.hpi" >> "$GITHUB_OUTPUT"
+          echo "✅ HPI file ready: parallels-devops-${VERSION}.hpi"
 
-      - name: Create and push Git tag
+      - name: Wait for CD workflow to create release
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          TAG="v${VERSION}"
           
-          git tag -a "v${VERSION}" -m "Release ${VERSION}"
-          git push origin "v${VERSION}"
-          echo "✅ Created and pushed tag v${VERSION}"
-
-      - name: Create GitHub Release
+          echo "Waiting for CD workflow to create release ${TAG}..."
+          
+          # Wait up to 30 minutes for the release to be created (CD workflow runs full Maven build + deployment)
+          for i in {1..180}; do
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "✅ Release ${TAG} found!"
+              exit 0
+            fi
+            echo "⏳ Waiting for release... (attempt $i/180)"
+            sleep 10
+          done
+          
+          echo "❌ Release ${TAG} not found after 30 minutes"
+          exit 1
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          PR_BODY="${{ github.event.pull_request.body }}"
-          
-          # Find the actual .hpi file
-          HPI_FILE=$(find target -name "parallels-devops*.hpi" -type f | head -n 1)
-          
-          if [ -z "$HPI_FILE" ]; then
-            echo "❌ ERROR: No .hpi file found in target/"
-            exit 1
-          fi
-          
-          echo "Found .hpi file: $HPI_FILE"
-          
-          # Rename file to include version
-          VERSIONED_HPI="target/parallels-devops-${VERSION}.hpi"
-          cp "$HPI_FILE" "$VERSIONED_HPI"
-          echo "Created versioned file: $VERSIONED_HPI"
-          
-          # Create release with PR body as notes and attach versioned .hpi file
-          gh release create "v${VERSION}" \
-            --title "${VERSION}" \
-            --notes "$PR_BODY" \
-            "$VERSIONED_HPI"
-          
-          echo "✅ GitHub release created: v${VERSION}"
+          GH_TOKEN: ${{ github.token }}
 
-      - name: Summary
+      - name: Upload HPI to existing release
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          echo "### 🎉 Release Published!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Version**: ${VERSION}" >> $GITHUB_STEP_SUMMARY
-          echo "**Tag**: v${VERSION}" >> $GITHUB_STEP_SUMMARY
-          echo "**Artifact**: parallels-devops.hpi" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "[View Release](https://github.com/${{ github.repository }}/releases/tag/v${VERSION})" >> $GITHUB_STEP_SUMMARY
+          TAG="v${VERSION}"
+          HPI_PATH="${{ steps.hpi.outputs.HPI_PATH }}"
+          
+          echo "Uploading ${HPI_PATH} to release ${TAG}..."
+          gh release upload "$TAG" "$HPI_PATH" --clobber
+          
+          echo "✅ HPI file uploaded to GitHub release ${TAG}"
+        env:
+          GH_TOKEN: ${{ github.token }}
