@@ -1,46 +1,16 @@
-# Continuous Delivery - releases to Jenkins Update Center on release commits
+# Continuous Delivery - releases to Jenkins Update Center
+# Note: additional setup required, see https://www.jenkins.io/redirect/continuous-delivery-of-plugins
 name: cd
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+  check_run:
+    types:
+      - completed
 
 jobs:
-  check-release:
-    name: Check if Release Commit
-    runs-on: ubuntu-latest
-    outputs:
-      is-release: ${{ steps.check.outputs.is-release }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 10
-      
-      - name: Check if from release branch
-        id: check
-        run: |
-          # Check if the most recent commit is from a release/ branch (works with both merge and squash)
-          COMMIT_MESSAGE=$(git log -1 --pretty=%s)
-          echo "Commit message: $COMMIT_MESSAGE"
-          
-          # Check for "release/" in commit message or PR reference with (#XX) from release branch
-          if [[ "$COMMIT_MESSAGE" =~ release/[0-9]+\.[0-9]+\.[0-9]+ ]] || [[ "$COMMIT_MESSAGE" =~ ^chore:\ bump\ version ]]; then
-            echo "is-release=true" >> "$GITHUB_OUTPUT"
-            echo "✅ This is a release commit"
-          else
-            echo "is-release=false" >> "$GITHUB_OUTPUT"
-            echo "ℹ️ This is not a release commit"
-          fi
-
-  release:
-    name: Publish to Jenkins Update Center
-    needs: check-release
-    if: needs.check-release.outputs.is-release == 'true' || github.event_name == 'workflow_dispatch'
+  maven-cd:
     uses: jenkins-infra/github-reusable-workflows/.github/workflows/maven-cd.yml@v1
-    with:
-      validate_only: false
     secrets:
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
       MAVEN_TOKEN: ${{ secrets.MAVEN_TOKEN }}
