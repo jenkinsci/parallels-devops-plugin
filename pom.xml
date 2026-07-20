@@ -34,7 +34,7 @@
     </scm>
 
     <properties>
-        <revision>0.1.66</revision>
+        <revision>0.1.67</revision>
         <changelist>999999-SNAPSHOT</changelist>
         <jenkins.baseline>2.528</jenkins.baseline>
         <jenkins.version>${jenkins.baseline}.3</jenkins.version>
