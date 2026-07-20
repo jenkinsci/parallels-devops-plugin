@@ -65,21 +65,27 @@ jobs:
       - name: Wait for CD workflow to create release
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          TAG="v${VERSION}"
+          COMMIT_SHA="${{ github.event.pull_request.merge_commit_sha }}"
+          SHORT_SHA="${COMMIT_SHA:0:7}"
           
-          echo "Waiting for CD workflow to create release ${TAG}..."
+          echo "Waiting for CD workflow to create release for commit ${SHORT_SHA}..."
+          echo "Expected version prefix: ${VERSION}"
           
-          # Wait up to 30 minutes for the release to be created (CD workflow runs full Maven build + deployment)
+          # Wait up to 30 minutes for the release to be created (CD workflow uses incremental versioning)
           for i in {1..180}; do
-            if gh release view "$TAG" >/dev/null 2>&1; then
-              echo "✅ Release ${TAG} found!"
+            # Find tag created by CD workflow (format: 0.1.66.XX.vGITHASH)
+            RELEASE_TAG=$(gh release list --limit 20 | grep "^${VERSION}\." | head -1 | awk '{print $1}')
+            
+            if [ -n "$RELEASE_TAG" ]; then
+              echo "✅ Release ${RELEASE_TAG} found!"
+              echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             echo "⏳ Waiting for release... (attempt $i/180)"
             sleep 10
           done
           
-          echo "❌ Release ${TAG} not found after 30 minutes"
+          echo "❌ Release with version ${VERSION} not found after 30 minutes"
           exit 1
         env:
           GH_TOKEN: ${{ github.token }}
@@ -87,12 +93,17 @@ jobs:
       - name: Upload HPI to existing release
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          TAG="v${VERSION}"
+          RELEASE_TAG=$(gh release list --limit 20 | grep "^${VERSION}\." | head -1 | awk '{print $1}')
           HPI_PATH="${{ steps.hpi.outputs.HPI_PATH }}"
           
-          echo "Uploading ${HPI_PATH} to release ${TAG}..."
-          gh release upload "$TAG" "$HPI_PATH" --clobber
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "❌ Could not find release tag"
+            exit 1
+          fi
           
-          echo "✅ HPI file uploaded to GitHub release ${TAG}"
+          echo "Uploading ${HPI_PATH} to release ${RELEASE_TAG}..."
+          gh release upload "$RELEASE_TAG" "$HPI_PATH" --clobber
+          
+          echo "✅ HPI file uploaded to GitHub release ${RELEASE_TAG}"
         env:
           GH_TOKEN: ${{ github.token }}
