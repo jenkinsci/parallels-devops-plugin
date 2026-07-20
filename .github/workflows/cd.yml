@@ -1,12 +1,8 @@
 # Continuous Delivery - releases to Jenkins Update Center
-# Note: additional setup required, see https://www.jenkins.io/redirect/continuous-delivery-of-plugins
 name: cd
 
 on:
   workflow_dispatch:
-  check_run:
-    types:
-      - completed
 
 jobs:
   maven-cd:
