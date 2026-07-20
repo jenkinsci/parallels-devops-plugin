@@ -21,11 +21,12 @@ jobs:
       - name: Check if from release branch
         id: check
         run: |
-          # Check if the most recent merge was from a release/ branch
-          MERGE_MESSAGE=$(git log -1 --merges --pretty=%s)
-          echo "Merge message: $MERGE_MESSAGE"
+          # Check if the most recent commit is from a release/ branch (works with both merge and squash)
+          COMMIT_MESSAGE=$(git log -1 --pretty=%s)
+          echo "Commit message: $COMMIT_MESSAGE"
           
-          if [[ "$MERGE_MESSAGE" =~ Merge\ pull\ request.*release/ ]] || [[ "$MERGE_MESSAGE" =~ ^release/ ]]; then
+          # Check for "release/" in commit message or PR reference with (#XX) from release branch
+          if [[ "$COMMIT_MESSAGE" =~ release/[0-9]+\.[0-9]+\.[0-9]+ ]] || [[ "$COMMIT_MESSAGE" =~ ^chore:\ bump\ version ]]; then
             echo "is-release=true" >> "$GITHUB_OUTPUT"
             echo "✅ This is a release commit"
           else
