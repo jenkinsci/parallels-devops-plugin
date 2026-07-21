@@ -17,7 +17,9 @@ import java.util.logging.Logger;
 
 /**
  * Provisioning config for <em>clone</em> mode: a new VM is cloned from an
- * existing base VM registered in the prl-devops-service host.
+ * existing base VM.
+ * 
+ * <p>Specify the VM name or ID that the Parallels DevOps Service recognizes.
  */
 public final class CloneProvisioningConfig extends ProvisioningConfig {
 

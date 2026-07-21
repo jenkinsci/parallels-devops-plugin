@@ -37,8 +37,8 @@ This plugin integrates Jenkins with Parallels DevOps Service so that agents are 
 
 Supported workflows include:
 
-- cloning an existing VM from a Parallels DevOps host
-- creating a VM from a Parallels catalog image through an orchestrator
+- cloning an existing VM from a Parallels DevOps host or orchestrator
+- creating a VM from a Parallels catalog image
 - connecting the new VM as an inbound Jenkins agent (VM connects to Jenkins)
 - removing the VM automatically after a one-shot build completes
 
@@ -49,7 +49,9 @@ The plugin is designed for elastic build fleets where different jobs may need di
 - Dynamic provisioning of Jenkins agents from Parallels DevOps Service
 - Support for both `HOST` and `ORCHESTRATOR` connection modes
 - Per-template label routing so jobs can request the right image
-- Two provisioning modes: clone an existing VM or create from catalog
+- Two provisioning modes (both work in HOST and ORCHESTRATOR):
+  - Clone an existing VM
+  - Create from catalog
 - Inbound agent architecture (VMs connect TO Jenkins, works through NAT/firewalls)
 - Configurable VM readiness timeout and polling interval
 - Configurable agent bootstrap settings (Java path, JVM options, connection timeout)
@@ -116,17 +118,17 @@ The plugin supports two provisioning modes.
 
 #### Clone existing VM
 
-Use this mode when you already have a prepared VM on a Parallels DevOps host and want Jenkins to clone it per build.
+Use this mode when you already have a prepared VM and want Jenkins to clone it per build.
 
 Required field:
 
-- `Base VM Name or VM ID`
+- `Base VM Name or VM ID` - The identifier (name or ID) of the VM to clone, as recognized by the Parallels DevOps Service
 
-This is usually the simplest path when you maintain your own golden images on a host.
+This is usually the simplest path when you maintain your own golden images.
 
 #### Create from catalog
 
-Use this mode when your images come from a Parallels catalog. [Learn more](https://parallels.github.io/prl-devops-service/docs/devops/catalog/overview/)
+Use this mode when your images come from a Parallels catalog. This mode works in both HOST and ORCHESTRATOR modes. [Learn more](https://parallels.github.io/prl-devops-service/docs/devops/catalog/overview/)
 
 Typical fields include:
 
@@ -136,7 +138,7 @@ Typical fields include:
 - `Catalog URL`
 - `Catalog Credentials`
 
-This is the better fit when you want centrally managed images and orchestrated provisioning.
+This is ideal when you want centrally managed, versioned images.
 
 ![Catalog-based provisioning template](docs/images/catalog-based.png)
 

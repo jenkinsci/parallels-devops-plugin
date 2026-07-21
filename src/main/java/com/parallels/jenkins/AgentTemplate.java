@@ -14,9 +14,7 @@ import java.io.Serializable;
 /**
  * Per-VM-type configuration. One {@code AgentTemplate} maps to one VM type in
  * Parallels DevOps Service. The available provisioning strategies are rendered via
- * {@code <f:dropdownDescriptorSelector>}; incompatible combinations (e.g. Clone
- * in Orchestrator mode) are rejected at save time by
- * {@link PrlDevopsCloud.DescriptorImpl#newInstance}.
+ * {@code <f:dropdownDescriptorSelector>}.
  */
 public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implements Serializable {
 
