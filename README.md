@@ -62,7 +62,7 @@ The plugin is designed for elastic build fleets where different jobs may need di
 
 Before configuring the plugin in Jenkins, make sure you have:
 
-1. A reachable Parallels DevOps Service endpoint.
+1. A reachable Parallels DevOps Service endpoint (version 1.0.5 or later required).
 2. Jenkins credentials for the Parallels DevOps API.
 3. Jenkins URL configured (Manage Jenkins → System → Jenkins Location) so VMs can connect back to Jenkins.
 4. At least one VM source, either:
