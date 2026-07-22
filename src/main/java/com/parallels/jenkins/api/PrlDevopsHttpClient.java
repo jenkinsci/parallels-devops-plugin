@@ -126,7 +126,7 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
                 HttpRequest.newBuilder()
                         .uri(toUri(path))
                         .header(authHeaderName, authHeaderValue.getPlainText())
-                        .GET()
+                        .PUT(HttpRequest.BodyPublishers.noBody())
                         .build());
         requireSuccessful(response);
     }

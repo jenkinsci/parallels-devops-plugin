@@ -32,9 +32,9 @@ Parallels DevOps Service                    Jenkins Plugin
 
 | Jenkins Plugin concept | What it means in Parallels DevOps |
 |---|---|
-| `AgentTemplate.baseVmName` | The **exact name** of a VM that already exists on the host. This is the source being cloned. It does **not** have to be running — stopped is fine and preferred. |
+| `AgentTemplate.baseVmName` | Name or ID of a VM that already exists. This is the source being cloned. The VM does **not** have to be running — stopped is fine and preferred. |
 | `AgentTemplate.templateLabel` | A Jenkins label string. Jobs that declare `label 'macos-sonoma'` get routed here. Has **no meaning** on the Parallels side. |
-| Clone request | Plugin calls `PUT /api/v1/machines/{baseVmName}/clone`. DevOps Service duplicates the VM disk, assigns it a new UUID, and starts it. |
+| Clone request | Plugin calls `PUT /api/v1/machines/{baseVmName}/clone` (HOST mode) or `PUT /api/v1/orchestrator/machines/{vmId}/clone` (ORCHESTRATOR mode). DevOps Service duplicates the VM disk, assigns it a new UUID, and starts it. |
 | `vmId` in `CloneResponse` | The UUID of the **newly created clone** — not the base VM. Jenkins tracks this clone for its entire lifetime. |
 | `ip_configured` in `VmStatusResponse` | The IP address the plugin SSHes into. The clone must have the SSH daemon running and the OS must have reported its IP to prl-devops-service. |
 
@@ -44,7 +44,7 @@ You need **exactly one base VM** per `AgentTemplate`. That base VM is:
 
 - Created and configured once, manually.
 - Kept **stopped** (the clone API works on a stopped VM and starts the clone fresh each time).
-- Named exactly what you put in `baseVmName` — e.g. `macOS-Sonoma-base`.
+- Identified by name or ID in the `baseVmName` field (whatever the Parallels DevOps Service expects)
 - Has SSH enabled, a known user account, and Java pre-installed.
 
 The plugin never touches the base VM itself. Every build gets a **fresh clone**.
@@ -178,7 +178,9 @@ ssh parallels@<VM-IP> "java -version && echo OK"
 sudo shutdown -h now
 ```
 
-In the prl-devops-service interface, confirm the VM name is **exactly** `macOS-Sonoma-base` (or whatever you plan to put in `baseVmName`). The clone API uses this name as the source ID, so spelling must be exact.
+In the prl-devops-service interface, confirm the VM identifier (name or ID) that you'll use in `baseVmName`.
+
+The clone API uses this identifier as the source, so it must be exact.
 
 The base VM is now ready. You should never manually start it again — the plugin will always clone it.
 
@@ -188,7 +190,8 @@ The base VM is now ready. You should never manually start it again — the plugi
 
 - Java 21 and Maven installed (`java -version`, `mvn -version`)
 - A running **Parallels DevOps Service** instance (or a mock server — see Step 0 below)
-- The base VM you intend to clone must already exist on the host/orchestrator
+- The base VM you intend to clone must already exist
+- The VM identifier (name or ID) recognized by the Parallels DevOps Service
 - SSH credentials for the cloned VM are available (username + private key or password)
 
 ---
@@ -266,7 +269,7 @@ Fill in the template fields:
 | Field | Value |
 |---|---|
 | **Template Label** | `macos-sonoma` (must match the job's label expression exactly) |
-| **Base VM Name** | Exact name of the source VM in DevOps Service, e.g. `macOS-Sonoma-base` |
+| **Base VM Name or VM ID** | VM identifier from your Parallels DevOps Service (e.g., `macOS-Sonoma-base` or `dcc2016e-5563-4bf4-8312-1492ec8f1663`) |
 | **SSH Credentials** | Select `prl-vm-ssh-cred` (created in Step 2) |
 | **Remote FS Root** | `/Users/parallels/jenkins-agent` (must exist on the cloned VM) |
 | **Number of Executors** | `1` |

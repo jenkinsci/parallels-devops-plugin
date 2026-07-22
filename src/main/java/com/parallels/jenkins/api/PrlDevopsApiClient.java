@@ -74,8 +74,8 @@ public interface PrlDevopsApiClient {
     /**
      * Starts a VM that is in the {@code stopped} state.
      *
-     * <p>Maps to {@code GET /api/v1/machines/{vmId}/start} (host mode) or
-     * {@code GET /api/v1/orchestrator/machines/{vmId}/start}
+     * <p>Maps to {@code PUT /api/v1/machines/{vmId}/start} (host mode) or
+     * {@code PUT /api/v1/orchestrator/machines/{vmId}/start}
      * (orchestrator mode).
      *
      * <p>The API accepts the request and begins booting; the VM transitions

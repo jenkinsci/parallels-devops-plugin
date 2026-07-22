@@ -145,7 +145,7 @@ class PrlDevopsHttpClientTest {
         assertDoesNotThrow(() -> hostClient.startVm(VM_ID));
 
         RecordedRequest req = server.takeRequest();
-        assertEquals("GET", req.getMethod());
+        assertEquals("PUT", req.getMethod());
         assertEquals("/api/v1/machines/" + VM_ID + "/start", req.getPath());
         assertEquals("Bearer " + TOKEN, req.getHeader("Authorization"));
     }
@@ -157,7 +157,7 @@ class PrlDevopsHttpClientTest {
         orchClient.startVm(VM_ID);
 
         RecordedRequest req = server.takeRequest();
-        assertEquals("GET", req.getMethod());
+        assertEquals("PUT", req.getMethod());
         assertEquals(
                 "/api/v1/orchestrator/machines/" + VM_ID + "/start",
                 req.getPath());

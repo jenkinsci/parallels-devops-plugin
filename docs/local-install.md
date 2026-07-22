@@ -105,9 +105,9 @@ Scroll down to **Agent Templates** and click **Add Template**. Configure:
 
 Select **Clone existing VM** and supply:
 
-- **Base VM Name or VM ID** — the name or ID of the golden VM registered in the Parallels DevOps service.
+- **Base VM Name or VM ID**: The identifier (name or ID) of the VM to clone, as recognized by the Parallels DevOps Service (e.g., `macos-sonoma-base` or `dcc2016e-5563-4bf4-8312-1492ec8f1663`)
 
-This is the simplest path when you manage your own golden images on a host.
+This is the simplest path when you manage your own golden images.
 
 #### Create from catalog
 
