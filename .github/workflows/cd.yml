@@ -3,15 +3,55 @@ name: cd
 
 on:
   workflow_dispatch:  # Allow manual triggers
-  pull_request:
-    types: [closed]
+  push:
     branches:
       - main
 
 jobs:
+  # Check if this push is from a release/* branch merge
+  check-release:
+    runs-on: ubuntu-latest
+    outputs:
+      is_release: ${{ steps.check.outputs.is_release }}
+    steps:
+      - name: Check if push came from release branch merge
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # For manual triggers, always proceed
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Manual trigger - proceeding with release"
+            exit 0
+          fi
+          
+          # For push events, check if this commit merged a release/* PR
+          COMMIT_SHA="${{ github.sha }}"
+          
+          # Find PRs merged by this commit
+          PR_DATA=$(gh api "repos/${{ github.repository }}/commits/${COMMIT_SHA}/pulls" \
+            --jq '.[] | select(.merged_at != null) | .head.ref' 2>/dev/null || echo "")
+          
+          if [[ -z "$PR_DATA" ]]; then
+            echo "⏭️  No merged PR found for this commit, skipping CD"
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          
+          # Check if any merged PR came from release/* branch
+          if echo "$PR_DATA" | grep -q "^release/"; then
+            BRANCH=$(echo "$PR_DATA" | grep "^release/" | head -1)
+            echo "✅ This push merged PR from branch: $BRANCH"
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "⏭️  Push from non-release branch: $PR_DATA"
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
   maven-cd:
-    # Only run when manually triggered OR when a release/* PR is merged
-    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/'))
+    needs: check-release
+    if: needs.check-release.outputs.is_release == 'true'
     uses: jenkins-infra/github-reusable-workflows/.github/workflows/maven-cd.yml@v1
     secrets:
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
