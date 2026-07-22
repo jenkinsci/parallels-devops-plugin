@@ -1,20 +1,24 @@
 name: Upload HPI to GitHub Release
 
 on:
-  pull_request:
-    types: [closed]
+  workflow_run:
+    workflows: ["cd"]
+    types: [completed]
     branches:
       - main
 
 jobs:
   upload-hpi:
     name: Upload HPI to GitHub Release
-    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
+    # Only run if CD workflow succeeded
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -22,11 +26,10 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Extract version from branch name
+      - name: Extract version from pom.xml
         id: version
         run: |
-          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
-          VERSION="${BRANCH_NAME#release/}"
+          VERSION=$(grep '<revision>' pom.xml | sed 's/.*<revision>\(.*\)<\/revision>.*/\1/')
           echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Version: $VERSION"
 
@@ -62,44 +65,33 @@ jobs:
           echo "HPI_PATH=target/parallels-devops-${VERSION}.hpi" >> "$GITHUB_OUTPUT"
           echo "✅ HPI file ready: parallels-devops-${VERSION}.hpi"
 
-      - name: Wait for CD workflow to create release
+      - name: Find release created by CD workflow
+        id: release
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          COMMIT_SHA="${{ github.event.pull_request.merge_commit_sha }}"
-          SHORT_SHA="${COMMIT_SHA:0:7}"
           
-          echo "Waiting for CD workflow to create release for commit ${SHORT_SHA}..."
-          echo "Expected version prefix: ${VERSION}"
+          echo "Looking for release with version prefix ${VERSION}..."
           
-          # Wait up to 30 minutes for the release to be created (CD workflow uses incremental versioning)
-          for i in {1..180}; do
-            # Find tag created by CD workflow (format: 0.1.66.XX.vGITHASH)
-            RELEASE_TAG=$(gh release list --limit 20 | grep "^${VERSION}\." | head -1 | awk '{print $1}')
-            
-            if [ -n "$RELEASE_TAG" ]; then
-              echo "✅ Release ${RELEASE_TAG} found!"
-              echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "⏳ Waiting for release... (attempt $i/180)"
-            sleep 10
-          done
+          # CD workflow creates tags like: 0.1.69.XX.vGITHASH
+          # Find the most recent one matching our version
+          RELEASE_TAG=$(gh release list --limit 20 | grep "^${VERSION}\." | head -1 | awk '{print $1}')
           
-          echo "❌ Release with version ${VERSION} not found after 30 minutes"
-          exit 1
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "❌ Release with version ${VERSION} not found"
+            echo "Available releases:"
+            gh release list --limit 10
+            exit 1
+          fi
+          
+          echo "✅ Found release: ${RELEASE_TAG}"
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ github.token }}
 
       - name: Upload HPI to existing release
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          RELEASE_TAG=$(gh release list --limit 20 | grep "^${VERSION}\." | head -1 | awk '{print $1}')
+          RELEASE_TAG="${{ steps.release.outputs.RELEASE_TAG }}"
           HPI_PATH="${{ steps.hpi.outputs.HPI_PATH }}"
-          
-          if [ -z "$RELEASE_TAG" ]; then
-            echo "❌ Could not find release tag"
-            exit 1
-          fi
           
           echo "Uploading ${HPI_PATH} to release ${RELEASE_TAG}..."
           gh release upload "$RELEASE_TAG" "$HPI_PATH" --clobber

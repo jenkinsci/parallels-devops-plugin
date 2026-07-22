@@ -2,10 +2,16 @@
 name: cd
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # Allow manual triggers
+  pull_request:
+    types: [closed]
+    branches:
+      - main
 
 jobs:
   maven-cd:
+    # Only run when manually triggered OR when a release/* PR is merged
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/'))
     uses: jenkins-infra/github-reusable-workflows/.github/workflows/maven-cd.yml@v1
     secrets:
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
