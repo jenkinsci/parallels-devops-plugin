@@ -115,13 +115,17 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
             
             log.println("[PrlDevops] Bootstrapping inbound agent on VM " + vmId);
             log.println("[PrlDevops] Agent will connect to: " + jenkinsUrl);
+            LOGGER.info("[PrlDevops] Starting agent launch for VM " + vmId + ", agent name: " + agentName);
             
             // Step 0: Verify VM is ready to execute commands (double-check readiness)
             log.println("[PrlDevops] Verifying VM readiness before agent bootstrap...");
             if (!waitForVmExecuteReady(log, 60)) {
-                throw new IOException("[PrlDevops] VM " + vmId + " is not ready to execute commands after 60 seconds");
+                String errorMsg = "[PrlDevops] VM " + vmId + " is not ready to execute commands after 60 seconds";
+                LOGGER.warning(errorMsg);
+                throw new IOException(errorMsg);
             }
             log.println("[PrlDevops] VM is ready to execute commands");
+            LOGGER.info("[PrlDevops] VM " + vmId + " is ready to execute commands");
             
             // Step 1: Download agent.jar from Jenkins controller
             log.println("[PrlDevops] Downloading agent.jar via execute API...");
@@ -132,6 +136,7 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
             ExecuteResponse downloadResp = getApiClient().executeCommand(vmId, downloadRequest);
             
             log.println("[PrlDevops] Download exit code: " + downloadResp.getExitCode());
+            LOGGER.info("[PrlDevops] VM " + vmId + " agent.jar download exit code: " + downloadResp.getExitCode());
             if (downloadResp.getStdout() != null && !downloadResp.getStdout().isBlank()) {
                 log.println("[PrlDevops] Download output: " + downloadResp.getStdout());
             }
@@ -147,6 +152,7 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
                                 "  - Firewall allows connections to Jenkins port";
                 }
                 errorMsg += "\nOutput: " + downloadResp.getStdout();
+                LOGGER.warning("[PrlDevops] VM " + vmId + " agent.jar download failed: " + errorMsg);
                 throw new IOException(errorMsg);
             }
             
@@ -156,11 +162,15 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
             ExecuteResponse verifyResp = getApiClient().executeCommand(vmId,
                     new ExecuteRequest(verifyCmd, vmUser, Collections.emptyMap()));
             log.println("[PrlDevops] agent.jar verification: " + verifyResp.getStdout());
+            LOGGER.info("[PrlDevops] VM " + vmId + " agent.jar verification: " + verifyResp.getStdout());
             
             if (verifyResp.getExitCode() != 0 || !verifyResp.getStdout().contains("/tmp/agent.jar")) {
-                throw new IOException("[PrlDevops] agent.jar file not found or download incomplete");
+                String errorMsg = "[PrlDevops] agent.jar file not found or download incomplete";
+                LOGGER.warning("[PrlDevops] VM " + vmId + " " + errorMsg);
+                throw new IOException(errorMsg);
             }
             log.println("[PrlDevops] agent.jar downloaded successfully");
+            LOGGER.info("[PrlDevops] VM " + vmId + " agent.jar downloaded successfully");
             
             // Step 2: Start inbound agent process (connects TO Jenkins)
             log.println("[PrlDevops] Starting inbound agent process...");
@@ -179,13 +189,16 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
                     new ExecuteRequest(agentCmd, vmUser, Collections.emptyMap()));
             
             log.println("[PrlDevops] Agent start exit code: " + startResp.getExitCode());
+            LOGGER.info("[PrlDevops] VM " + vmId + " agent process start exit code: " + startResp.getExitCode());
             if (startResp.getStdout() != null && !startResp.getStdout().isBlank()) {
                 log.println("[PrlDevops] Agent start output: " + startResp.getStdout());
             }
             
             if (startResp.getExitCode() != 0) {
-                throw new IOException("[PrlDevops] Failed to start agent process. Exit code: " 
-                        + startResp.getExitCode() + "\nOutput: " + startResp.getStdout());
+                String errorMsg = "[PrlDevops] Failed to start agent process. Exit code: " 
+                        + startResp.getExitCode() + "\nOutput: " + startResp.getStdout();
+                LOGGER.warning("[PrlDevops] VM " + vmId + " " + errorMsg);
+                throw new IOException(errorMsg);
             }
             
             // Give agent a moment to start and check if process is running
@@ -199,6 +212,7 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
                     new ExecuteRequest("ps aux | grep agent.jar | grep -v grep || echo 'No agent process found'", 
                             vmUser, Collections.emptyMap()));
             log.println("[PrlDevops] Agent process check: " + psResp.getStdout());
+            LOGGER.info("[PrlDevops] VM " + vmId + " agent process check: " + psResp.getStdout());
             
             log.println("[PrlDevops] Agent process started. Waiting for inbound connection...");
             
@@ -207,17 +221,19 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
             
             if (computer.isOnline()) {
                 log.println("[PrlDevops] Inbound agent connected successfully!");
-                LOGGER.fine("[PrlDevops] Inbound agent online for VM " + vmId);
+                LOGGER.info("[PrlDevops] Inbound agent connected successfully for VM " + vmId + ", agent name: " + agentName);
                 launchFailed = false;
             } else {
-                throw new IOException("[PrlDevops] Agent process started but failed to connect within " 
-                        + agentConnectionTimeoutSec + " seconds. Check /tmp/agent.log on the VM.");
+                String errorMsg = "[PrlDevops] Agent process started but failed to connect within " 
+                        + agentConnectionTimeoutSec + " seconds. Check /tmp/agent.log on the VM.";
+                LOGGER.warning("[PrlDevops] VM " + vmId + ", agent " + agentName + ": " + errorMsg);
+                throw new IOException(errorMsg);
             }
             
         } catch (PrlApiException | IOException e) {
             launchFailed = true;
             computer.setAcceptingTasks(false);
-            String msg = "[PrlDevops] Inbound agent launch failed for VM " + vmId + ": " + e.getMessage();
+            String msg = "[PrlDevops] Inbound agent launch failed for VM " + vmId + ", agent: " + computer.getName() + ": " + e.getMessage();
             log.println(msg);
             LOGGER.warning(msg);
             
@@ -227,8 +243,11 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
                 ExecuteResponse logResp = getApiClient().executeCommand(vmId,
                         new ExecuteRequest("tail -50 /tmp/agent.log 2>/dev/null || echo 'No log file'", 
                                 vmUser, Collections.emptyMap()));
+                String logOutput = logResp.getStdout();
                 log.println("[PrlDevops] Agent log (last 50 lines):");
-                log.println(logResp.getStdout());
+                log.println(logOutput);
+                LOGGER.info("[PrlDevops] VM " + vmId + " agent log retrieved for debugging");
+                LOGGER.info("[PrlDevops] Agent log output:\n" + logOutput);
             } catch (PrlApiException | IOException logErr) {
                 log.println("[PrlDevops] Could not retrieve agent log: " + logErr.getMessage());
             }
@@ -262,7 +281,7 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
                 
                 if (probe.getExitCode() == 0) {
                     log.println("[PrlDevops] VM execute API ready after " + attempt + " attempts!");
-                    LOGGER.fine("[PrlDevops] VM " + vmId + " execute API ready after " + attempt + " attempts");
+                    LOGGER.info("[PrlDevops] VM " + vmId + " execute API ready after " + attempt + " attempts");
                     return true;
                 }
                 
@@ -272,12 +291,13 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
             } catch (PrlApiException | IOException e) {
                 // Execute API not ready yet, will retry
                 log.println("[PrlDevops] Readiness probe attempt " + attempt + " failed: " + e.getMessage());
-                LOGGER.fine("[PrlDevops] VM " + vmId + " execute probe failed (attempt " + attempt + "): " + e.getMessage());
+                LOGGER.info("[PrlDevops] VM " + vmId + " execute probe failed (attempt " + attempt + "): " + e.getMessage());
             }
             
             long remaining = (deadline - System.currentTimeMillis()) / 1000;
             if (remaining <= 0) {
                 log.println("[PrlDevops] VM readiness timeout - execute API not ready after " + attempt + " attempts");
+                LOGGER.warning("[PrlDevops] VM " + vmId + " readiness timeout - execute API not ready after " + attempt + " attempts");
                 break;
             }
             
@@ -295,6 +315,7 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
         }
         
         log.println("[PrlDevops] VM execute API did not become ready within " + timeoutSec + " seconds");
+        LOGGER.warning("[PrlDevops] VM " + vmId + " execute API did not become ready within " + timeoutSec + " seconds");
         return false;
     }
 
@@ -323,13 +344,16 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
             if (attempt % 6 == 0) {  // Log every ~30 seconds
                 long remaining = (deadline - System.currentTimeMillis()) / 1000;
                 log.println("[PrlDevops] Waiting for agent connection... (" + remaining + "s remaining)");
+                LOGGER.info("[PrlDevops] VM " + vmId + ", agent " + computer.getName() + " waiting for connection... (" + remaining + "s remaining)");
             }
             
             try {
                 Thread.sleep(5000);  // Check every 5 seconds
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new IOException("[PrlDevops] Agent connection wait interrupted", e);
+                String msg = "[PrlDevops] Agent connection wait interrupted";
+                LOGGER.warning(msg);
+                throw new IOException(msg, e);
             }
             attempt++;
         }
