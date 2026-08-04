@@ -133,8 +133,9 @@ public class PrlDevopsCloud extends Cloud {
     public boolean canProvision(CloudState state) {
         AgentTemplate template = getTemplateForLabel(state.getLabel());
         if (template == null) {
-            LOGGER.warning("[PrlDevops] canProvision: no template matches label '"
-                    + state.getLabel() + "'. Check the template label in cloud configuration.");
+            // Normal: Jenkins queries all clouds for all labels. Not an error.
+            LOGGER.fine("[PrlDevops] canProvision: no template matches label '"
+                    + state.getLabel() + "'");
             return false;
         }
         if (Util.fixEmptyAndTrim(serviceUrl) == null) {
