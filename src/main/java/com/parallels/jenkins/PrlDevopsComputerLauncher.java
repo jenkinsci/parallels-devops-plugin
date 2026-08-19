@@ -179,9 +179,10 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
             
             // Use sh -c with proper backgrounding that works without TTY
             // Redirect stdin from /dev/null to avoid "Inappropriate ioctl" errors from nohup
-            // Use -webSocket flag to avoid X-Instance-Identity issues in development mode
+            // Use -noCertificateCheck to allow self-signed/untrusted certificates
+            // NOTE: Removed -webSocket as production Jenkins doesn't support it (only JNLP4-connect)
             String agentCmd = String.format(
-                    "sh -c '%s %s-jar /tmp/agent.jar -url \"%s\" -secret \"%s\" -name \"%s\" -workDir /tmp/jenkins -webSocket </dev/null >/tmp/agent.log 2>&1 & echo Agent_PID=$!'",
+                    "sh -c '%s %s-jar /tmp/agent.jar -url \"%s\" -secret \"%s\" -name \"%s\" -workDir /tmp/jenkins -noCertificateCheck </dev/null >/tmp/agent.log 2>&1 & echo Agent_PID=$!'",
                     javaCmd, jvmOpts, jenkinsUrl, secret, agentName);
             log.println("[PrlDevops] Agent command: " + agentCmd.replace(secret, "***SECRET***"));
             
