@@ -29,6 +29,9 @@
                 <f:textbox default="java" placeholder="java" 
                            description="Path to Java executable on the VM (e.g., /usr/lib/jvm/java-17/bin/java). Leave as 'java' to use system default." />
             </f:entry>
+            <f:entry title="Use WebSocket" field="useWebSocket">
+                <f:checkbox description="Enable to connect inbound agents over WebSockets (HTTP/HTTPS) instead of standard TCP port 50000." />
+            </f:entry>
             <f:entry title="JVM Options" field="jvmOptions">
                 <f:textbox placeholder="-Xmx512m" 
                            description="Extra JVM flags for the agent process (e.g., -Xmx512m for memory limit)." />
