@@ -28,6 +28,11 @@ import java.time.Duration;
 public interface PrlDevopsApiClient {
 
     /**
+     * Returns the connection mode (HOST or ORCHESTRATOR) used by this client.
+     */
+    ConnectionMode getConnectionMode();
+
+    /**
      * Clones the VM identified by {@code sourceVmId}.
      *
      * <p>Maps to {@code PUT /api/v1/machines/{sourceVmId}/clone} (host mode) or
@@ -40,6 +45,18 @@ public interface PrlDevopsApiClient {
      * @throws PrlApiException on HTTP error or network failure.
      */
     CloneResponse cloneVm(String sourceVmId, CloneRequest request) throws PrlApiException;
+
+    /**
+     * Creates a new VM by cloning an existing VM. Alias for {@link #cloneVm(String, CloneRequest)}.
+     *
+     * @param sourceVmId ID or name of the VM to clone.
+     * @param request    Clone options (clone name, destination path).
+     * @return {@link CloneResponse} containing the new VM's ID.
+     * @throws PrlApiException on HTTP error or network failure.
+     */
+    default CloneResponse createVmFromClone(String sourceVmId, CloneRequest request) throws PrlApiException {
+        return cloneVm(sourceVmId, request);
+    }
 
     /**
      * Creates a new VM from a Parallels DevOps catalog entry.

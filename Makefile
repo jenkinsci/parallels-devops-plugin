@@ -1,7 +1,9 @@
 .PHONY: all build test verify run clean package
 
-# Force Maven to use JDK 21 (fixes 'Unsupported class file major version 69 / Java 25' bugs)
+# Force Maven to use JDK 21 on macOS if available (fixes 'Unsupported class file major version 69 / Java 25' bugs)
+ifneq ($(OS),Windows_NT)
 export JAVA_HOME := $(shell /usr/libexec/java_home -v 21 2>/dev/null || echo "/opt/homebrew/opt/openjdk@21")
+endif
 
 # Configurable environment variables
 JENKINS_PORT     ?= 8080
@@ -26,7 +28,7 @@ test:
 # Override version: make run JENKINS_VERSION=2.479.1
 # Binds to 0.0.0.0 so VMs on the local network can reach Jenkins at the Mac's LAN IP.
 run:
-	mvn hpi:run -DskipTests -Dport=$(JENKINS_PORT) -Dhost=0.0.0.0 $(_VERSION_ARG)
+	mvn compiler:compile hpi:run -DskipTests -Dport=$(JENKINS_PORT) -Dhost=0.0.0.0 $(_VERSION_ARG)
 
 # Package the final .hpi file under target/
 package:

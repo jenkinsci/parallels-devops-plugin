@@ -3,6 +3,7 @@ package com.parallels.jenkins;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
 import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
+import com.parallels.jenkins.api.ConnectionMode;
 import com.parallels.jenkins.api.PrlDevopsApiClient;
 import com.parallels.jenkins.api.dto.CatalogManifest;
 import com.parallels.jenkins.api.dto.CreateVmRequest;
@@ -43,6 +44,7 @@ public final class CatalogProvisioningConfig extends ProvisioningConfig {
     private final String catalogId;
     private String architecture = "arm64";
     private String catalogVersion = "latest";
+    private String catalogManagerId;
     private String catalogUrl;
     private String catalogCredentialsId;
 
@@ -54,6 +56,7 @@ public final class CatalogProvisioningConfig extends ProvisioningConfig {
     public String getCatalogId() { return catalogId; }
     public String getArchitecture() { return architecture; }
     public String getCatalogVersion() { return catalogVersion; }
+    public String getCatalogManagerId() { return catalogManagerId; }
     public String getCatalogUrl() { return catalogUrl; }
     public String getCatalogCredentialsId() { return catalogCredentialsId; }
 
@@ -64,17 +67,19 @@ public final class CatalogProvisioningConfig extends ProvisioningConfig {
     public void setCatalogVersion(String catalogVersion) { this.catalogVersion = catalogVersion; }
 
     @DataBoundSetter
-    public void setCatalogUrl(String catalogUrl) { this.catalogUrl = catalogUrl; }
+    public void setCatalogManagerId(String catalogManagerId) { this.catalogManagerId = Util.fixEmptyAndTrim(catalogManagerId); }
+
+    @DataBoundSetter
+    public void setCatalogUrl(String catalogUrl) { this.catalogUrl = Util.fixEmptyAndTrim(catalogUrl); }
 
     @DataBoundSetter
     public void setCatalogCredentialsId(String catalogCredentialsId) {
-        this.catalogCredentialsId = catalogCredentialsId;
+        this.catalogCredentialsId = Util.fixEmptyAndTrim(catalogCredentialsId);
     }
 
     @Override
     public boolean canProvision() {
-        return Util.fixEmptyAndTrim(catalogId) != null
-                && Util.fixEmptyAndTrim(catalogUrl) != null;
+        return Util.fixEmptyAndTrim(catalogId) != null;
     }
 
     @Override
@@ -85,12 +90,25 @@ public final class CatalogProvisioningConfig extends ProvisioningConfig {
                                           Duration timeout,
                                           Duration pollInterval,
                                           ExecutorService executor) throws PrlApiException {
-        String connection = buildCatalogConnectionString();
+        ConnectionMode connectionMode = apiClient != null ? apiClient.getConnectionMode() : ConnectionMode.HOST;
+        String connection = null;
+        String mgrId = null;
+
+        if (connectionMode == ConnectionMode.ORCHESTRATOR) {
+            // Orchestrator Mode: catalogManagerId is optional; if present pass as catalog_manager_id, connection is null
+            mgrId = Util.fixEmptyAndTrim(catalogManagerId);
+        } else {
+            // Host Mode: if catalogUrl and catalogCredentialsId are configured, construct connection string
+            if (Util.fixEmptyAndTrim(catalogUrl) != null && Util.fixEmptyAndTrim(catalogCredentialsId) != null) {
+                connection = buildCatalogConnectionString();
+            }
+        }
+
         String vmName = "jenkins-" + label + "-" + System.currentTimeMillis();
-        CatalogManifest manifest = new CatalogManifest(catalogId, catalogVersion, connection,
+        CatalogManifest manifest = new CatalogManifest(catalogId, catalogVersion, connection, mgrId,
                 vmName, architecture);
         CreateVmRequest request = new CreateVmRequest(vmName, architecture, manifest);
-        LOGGER.fine("[PrlDevops] Creating VM from catalog '" + catalogId + "' for label '" + label + "'");
+        LOGGER.fine("[PrlDevops] Creating VM from catalog '" + catalogId + "' for label '" + label + "' (mode: " + connectionMode + ")");
         CreateVmResponse response = apiClient.createVmFromCatalog(request);
         String vmId = response.getId();
         LOGGER.fine("[PrlDevops] Catalog VM created; with VM ID=" + vmId);
@@ -138,9 +156,6 @@ public final class CatalogProvisioningConfig extends ProvisioningConfig {
         @Override
         public ProvisioningConfig newInstance(StaplerRequest2 req, JSONObject formData) throws FormException {
             CatalogProvisioningConfig config = (CatalogProvisioningConfig) super.newInstance(req, formData);
-            if (Util.fixEmptyAndTrim(config.getCatalogCredentialsId()) == null) {
-                throw new FormException("Catalog credentials are required", "catalogCredentialsId");
-            }
             if (Util.fixEmptyAndTrim(config.getCatalogId()) == null) {
                 throw new FormException("Catalog ID is required", "catalogId");
             }
@@ -184,9 +199,12 @@ public final class CatalogProvisioningConfig extends ProvisioningConfig {
         public FormValidation doCheckCatalogCredentialsId(
                 @QueryParameter String catalogCredentialsId) {
             Jenkins.get().checkPermission(Jenkins.ADMINISTER);
-            if (Util.fixEmptyAndTrim(catalogCredentialsId) == null) {
-                return FormValidation.error("Catalog credentials are required");
-            }
+            return FormValidation.ok();
+        }
+
+        @POST
+        public FormValidation doCheckCatalogManagerId(@QueryParameter String catalogManagerId) {
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
             return FormValidation.ok();
         }
 

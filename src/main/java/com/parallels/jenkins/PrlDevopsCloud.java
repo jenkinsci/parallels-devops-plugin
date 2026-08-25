@@ -66,6 +66,7 @@ public class PrlDevopsCloud extends Cloud {
     public String getServiceUrl() { return serviceUrl; }
     public String getCredentialsId() { return credentialsId; }
     public com.parallels.jenkins.api.ConnectionMode getConnectionMode() { return connectionMode; }
+    public boolean isOrchestratorMode() { return connectionMode == com.parallels.jenkins.api.ConnectionMode.ORCHESTRATOR; }
     public int getMaxAgents() { return maxAgents; }
     public List<AgentTemplate> getTemplates() { return Collections.unmodifiableList(templates); }
 

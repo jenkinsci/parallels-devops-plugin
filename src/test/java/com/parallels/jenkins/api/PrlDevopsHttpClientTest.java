@@ -96,6 +96,23 @@ class PrlDevopsHttpClientTest {
                 req.getPath());
     }
 
+    @Test
+    void createVmFromClone_sendsCorrectRequestAndParsesResponse() throws Exception {
+        server.enqueue(new MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"id\":\"new-vm-999\",\"status\":\"created\",\"error\":\"\"}"));
+
+        CloneResponse response = hostClient.createVmFromClone(VM_ID, new CloneRequest("clone-alias", null));
+
+        assertEquals("new-vm-999", response.getId());
+        assertEquals("created", response.getStatus());
+
+        RecordedRequest req = server.takeRequest();
+        assertEquals("PUT", req.getMethod());
+        assertEquals("/api/v1/machines/" + VM_ID + "/clone", req.getPath());
+    }
+
     // -------------------------------------------------------------------------
     // getVmStatus
     // -------------------------------------------------------------------------

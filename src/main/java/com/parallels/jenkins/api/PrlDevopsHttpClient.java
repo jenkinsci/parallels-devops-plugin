@@ -75,6 +75,11 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
     // -------------------------------------------------------------------------
 
     @Override
+    public ConnectionMode getConnectionMode() {
+        return mode;
+    }
+
+    @Override
     public CloneResponse cloneVm(String sourceVmId, CloneRequest request) throws PrlApiException {
         String path = machinePath(sourceVmId) + "/clone";
         String body = serialize(request);
@@ -87,6 +92,11 @@ public class PrlDevopsHttpClient implements PrlDevopsApiClient {
                         .build());
         requireSuccessful(response);
         return deserialize(response.body(), CloneResponse.class);
+    }
+
+    @Override
+    public CloneResponse createVmFromClone(String sourceVmId, CloneRequest request) throws PrlApiException {
+        return cloneVm(sourceVmId, request);
     }
 
     @Override
