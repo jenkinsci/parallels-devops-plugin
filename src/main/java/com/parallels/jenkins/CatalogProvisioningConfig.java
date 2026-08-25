@@ -90,7 +90,8 @@ public final class CatalogProvisioningConfig extends ProvisioningConfig {
                                           Duration timeout,
                                           Duration pollInterval,
                                           ExecutorService executor) throws PrlApiException {
-        ConnectionMode connectionMode = apiClient != null ? apiClient.getConnectionMode() : ConnectionMode.HOST;
+        java.util.Objects.requireNonNull(apiClient, "apiClient must not be null");
+        ConnectionMode connectionMode = apiClient.getConnectionMode();
         String connection = null;
         String mgrId = null;
 
