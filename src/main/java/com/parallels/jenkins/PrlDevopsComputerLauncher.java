@@ -53,10 +53,14 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
     public PrlDevopsComputerLauncher(String cloudName, String vmId, String vmUser, 
                                     PrlDevopsApiClient apiClient, AgentTemplate template) {
         super();  // Call JNLPLauncher constructor
-        boolean ws = template.isUseWebSocket();
-        if (!ws) {
-            Jenkins jenkins = Jenkins.getInstanceOrNull();
-            if (jenkins != null) {
+        boolean ws = false;
+        Jenkins jenkins = Jenkins.getInstanceOrNull();
+        if (jenkins != null) {
+            Cloud cloud = jenkins.getCloud(cloudName);
+            if (cloud instanceof PrlDevopsCloud prlCloud) {
+                ws = prlCloud.isUseWebSocket();
+            }
+            if (!ws) {
                 String rootUrl = jenkins.getRootUrl();
                 if (jenkins.getSlaveAgentPort() == -1 || (rootUrl != null && rootUrl.startsWith("https://"))) {
                     ws = true;  // HTTPS or disabled TCP port -> auto-switch to WebSocket

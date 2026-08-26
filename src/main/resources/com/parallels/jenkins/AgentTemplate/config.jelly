@@ -6,7 +6,7 @@
         </f:entry>
         <f:entry title="VM User" field="vmUser">
             <f:textbox placeholder="parallels" 
-                       description="OS user account for running bootstrap commands via execute API. Leave empty to use VM default." />
+                       description="OS user account on the target VM. Mandatory for macOS VMs (must be a valid user existing on each host)." />
         </f:entry>
         <f:entry title="Agent Workspace Directory" field="agentWorkspaceDir">
             <f:textbox default="/tmp/jenkins-agent"
@@ -28,9 +28,6 @@
             <f:entry title="Java Path" field="javaPath">
                 <f:textbox default="java" placeholder="java" 
                            description="Path to Java executable on the VM (e.g., /usr/lib/jvm/java-17/bin/java). Leave as 'java' to use system default." />
-            </f:entry>
-            <f:entry title="Use WebSocket" field="useWebSocket">
-                <f:checkbox description="Enable to connect inbound agents over WebSockets (HTTP/HTTPS) instead of standard TCP port 50000." />
             </f:entry>
             <f:entry title="JVM Options" field="jvmOptions">
                 <f:textbox placeholder="-Xmx512m" 

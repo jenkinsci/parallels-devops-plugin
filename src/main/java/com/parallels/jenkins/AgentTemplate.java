@@ -43,7 +43,6 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
     private int numExecutors = ONE_SHOT_EXECUTORS;
     private int vmReadyTimeoutSeconds = 600;  // 10 min — covers VM boot + agent readiness after creation
     private int vmReadyPollIntervalSeconds = 10;
-    private boolean useWebSocket = false;
 
     /**
      * Legacy field kept solely for XStream migration of configs saved before the
@@ -68,7 +67,6 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
     public String getVmUser() { return vmUser; }
     public String getJavaPath() { return javaPath; }
     public String getJvmOptions() { return jvmOptions; }
-    public boolean isUseWebSocket() { return useWebSocket; }
     public int getAgentConnectionTimeoutSec() { return agentConnectionTimeoutSec; }
     public String getAgentWorkspaceDir() { return agentWorkspaceDir; }
     public int getNumExecutors() { return ONE_SHOT_EXECUTORS; }
@@ -166,11 +164,6 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
     @DataBoundSetter
     public void setJvmOptions(String jvmOptions) {
         this.jvmOptions = jvmOptions != null ? jvmOptions : "";
-    }
-
-    @DataBoundSetter
-    public void setUseWebSocket(boolean useWebSocket) {
-        this.useWebSocket = useWebSocket;
     }
 
 

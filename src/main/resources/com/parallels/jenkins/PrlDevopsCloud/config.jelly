@@ -17,6 +17,9 @@
     <f:entry title="Max Concurrent Agents" field="maxAgents">
         <f:number default="1" min="1" max="50" description="Maximum number of VMs that may be alive at the same time for this cloud. 0 means unlimited." />
     </f:entry>
+    <f:entry title="Use WebSocket" field="useWebSocket">
+        <f:checkbox />
+    </f:entry>
     <f:validateButton title="Test Connection" method="testConnection"
                       with="serviceUrl,credentialsId" />
     <f:entry title="Templates">

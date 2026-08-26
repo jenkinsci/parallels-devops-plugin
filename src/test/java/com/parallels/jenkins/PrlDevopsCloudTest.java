@@ -22,6 +22,7 @@ class PrlDevopsCloudTest {
         cloud.setCredentialsId("test-credentials");
         cloud.setConnectionMode(ConnectionMode.HOST);
         cloud.setMaxAgents(10);
+        cloud.setUseWebSocket(true);
 
         r.jenkins.clouds.add(cloud);
 
@@ -33,6 +34,7 @@ class PrlDevopsCloudTest {
         assertEquals("test-credentials", loaded.getCredentialsId());
         assertEquals(ConnectionMode.HOST, loaded.getConnectionMode());
         assertEquals(10, loaded.getMaxAgents());
+        assertTrue(loaded.isUseWebSocket());
     }
 
     @Test
