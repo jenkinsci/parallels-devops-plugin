@@ -29,12 +29,8 @@ public class CreateVmRequest {
     private final CatalogManifest catalogManifest;
 
     public CreateVmRequest(String name, String architecture, CatalogManifest catalogManifest) {
-        this(name, true, architecture, catalogManifest);
-    }
-
-    public CreateVmRequest(String name, boolean startOnCreate, String architecture, CatalogManifest catalogManifest) {
         this.name = name;
-        this.startOnCreate = startOnCreate;
+        this.startOnCreate = true; // always true — Jenkins needs the VM running
         this.architecture = architecture;
         this.catalogManifest = catalogManifest;
     }

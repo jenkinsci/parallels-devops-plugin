@@ -108,7 +108,7 @@ public final class CatalogProvisioningConfig extends ProvisioningConfig {
         String vmName = "jenkins-" + label + "-" + System.currentTimeMillis();
         CatalogManifest manifest = new CatalogManifest(catalogId, catalogVersion, connection, mgrId,
                 vmName, architecture);
-        CreateVmRequest request = new CreateVmRequest(vmName, false, architecture, manifest);
+        CreateVmRequest request = new CreateVmRequest(vmName, architecture, manifest);
         LOGGER.fine("[PrlDevops] Creating VM from catalog '" + catalogId + "' for label '" + label + "' (mode: " + connectionMode + ")");
         CreateVmResponse response = apiClient.createVmFromCatalog(request);
         String vmId = response.getId();
@@ -120,7 +120,7 @@ public final class CatalogProvisioningConfig extends ProvisioningConfig {
                 apiClient,
                 timeout,
                 pollInterval,
-                false,
+                true,
                 executor);
     }
 
