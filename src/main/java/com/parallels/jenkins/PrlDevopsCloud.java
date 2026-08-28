@@ -56,6 +56,7 @@ public class PrlDevopsCloud extends Cloud {
     private String credentialsId;
     private com.parallels.jenkins.api.ConnectionMode connectionMode;
     private int maxAgents;
+    private boolean useWebSocket = false;
     private List<AgentTemplate> templates = new ArrayList<>();
 
     @DataBoundConstructor
@@ -66,7 +67,9 @@ public class PrlDevopsCloud extends Cloud {
     public String getServiceUrl() { return serviceUrl; }
     public String getCredentialsId() { return credentialsId; }
     public com.parallels.jenkins.api.ConnectionMode getConnectionMode() { return connectionMode; }
+    public boolean isOrchestratorMode() { return connectionMode == com.parallels.jenkins.api.ConnectionMode.ORCHESTRATOR; }
     public int getMaxAgents() { return maxAgents; }
+    public boolean isUseWebSocket() { return useWebSocket; }
     public List<AgentTemplate> getTemplates() { return Collections.unmodifiableList(templates); }
 
     @DataBoundSetter
@@ -77,6 +80,8 @@ public class PrlDevopsCloud extends Cloud {
     public void setConnectionMode(com.parallels.jenkins.api.ConnectionMode connectionMode) { this.connectionMode = connectionMode; }
     @DataBoundSetter
     public void setMaxAgents(int maxAgents) { this.maxAgents = maxAgents; }
+    @DataBoundSetter
+    public void setUseWebSocket(boolean useWebSocket) { this.useWebSocket = useWebSocket; }
     @DataBoundSetter
     public void setTemplates(List<AgentTemplate> templates) {
         this.templates = templates != null ? new ArrayList<>(templates) : new ArrayList<>();

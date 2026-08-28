@@ -17,9 +17,96 @@
     <f:entry title="Max Concurrent Agents" field="maxAgents">
         <f:number default="1" min="1" max="50" description="Maximum number of VMs that may be alive at the same time for this cloud. 0 means unlimited." />
     </f:entry>
+    <f:entry title="Use WebSocket" field="useWebSocket">
+        <f:checkbox />
+    </f:entry>
     <f:validateButton title="Test Connection" method="testConnection"
                       with="serviceUrl,credentialsId" />
     <f:entry title="Templates">
         <f:repeatableProperty field="templates" minimum="1" add="Add Template" />
     </f:entry>
+    <script type="text/javascript">
+        (function() {
+            function updateConnectionModeVisibility() {
+                var modeSelects = document.querySelectorAll('select[name="_.connectionMode"], select[name="connectionMode"], select[name$="connectionMode"]');
+                modeSelects.forEach(function(modeSelect) {
+                    var isOrchestrator = (modeSelect.value === 'ORCHESTRATOR');
+                    var cloudForm = modeSelect.closest('form') || modeSelect.closest('.jenkins-config') || document;
+
+                    // 1. Toggle orch-only fields (catalogManagerId)
+                    var orchFields = cloudForm.querySelectorAll('.prl-orch-field');
+                    orchFields.forEach(function(el) {
+                        el.style.display = isOrchestrator ? '' : 'none';
+                    });
+
+                    // 2. Toggle host-only fields (catalogUrl, catalogCredentialsId, test button)
+                    var hostFields = cloudForm.querySelectorAll('.prl-host-field');
+                    hostFields.forEach(function(el) {
+                        el.style.display = isOrchestrator ? 'none' : '';
+                    });
+
+                    // 3. Find and manage all Provisioning Mode dropdown descriptor selectors
+                    var allSelects = cloudForm.querySelectorAll('select');
+                    allSelects.forEach(function(s) {
+                        if (s === modeSelect || !s.options) return;
+                        
+                        var cloneOption = null;
+                        var catalogOption = null;
+                        for (var i = 0; i &lt; s.options.length; i++) {
+                            var opt = s.options[i];
+                            if (opt.value.indexOf('CloneProvisioningConfig') !== -1 || opt.text.indexOf('Clone') !== -1) {
+                                cloneOption = opt;
+                            }
+                            if (opt.value.indexOf('CatalogProvisioningConfig') !== -1 || opt.text.indexOf('Catalog') !== -1) {
+                                catalogOption = opt;
+                            }
+                        }
+
+                        if (cloneOption || catalogOption) {
+                            var row = s.closest('.jenkins-form-item') || s.closest('tr') || s.closest('.form-group');
+
+                            if (isOrchestrator) {
+                                if (cloneOption) {
+                                    cloneOption.disabled = true;
+                                    cloneOption.style.display = 'none';
+                                }
+                                if (catalogOption &amp;&amp; s.value !== catalogOption.value) {
+                                    s.value = catalogOption.value;
+                                    var evt = document.createEvent("HTMLEvents");
+                                    evt.initEvent("change", true, true);
+                                    s.dispatchEvent(evt);
+                                }
+                                if (row) {
+                                    row.style.display = 'none';
+                                }
+                            } else {
+                                if (cloneOption) {
+                                    cloneOption.disabled = false;
+                                    cloneOption.style.display = '';
+                                }
+                                if (row) {
+                                    row.style.display = '';
+                                }
+                            }
+                        }
+                    });
+                });
+            }
+
+            document.addEventListener('change', function(e) {
+                if (e.target &amp;&amp; e.target.name &amp;&amp; e.target.name.indexOf('connectionMode') !== -1) {
+                    updateConnectionModeVisibility();
+                }
+            });
+
+            document.addEventListener('DOMNodeInserted', function(e) {
+                if (e.target &amp;&amp; e.target.nodeType === 1) {
+                    setTimeout(updateConnectionModeVisibility, 50);
+                }
+            });
+
+            updateConnectionModeVisibility();
+            setInterval(updateConnectionModeVisibility, 300);
+        })();
+    </script>
 </j:jelly>

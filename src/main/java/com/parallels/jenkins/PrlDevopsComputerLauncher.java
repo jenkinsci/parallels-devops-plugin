@@ -53,6 +53,21 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
     public PrlDevopsComputerLauncher(String cloudName, String vmId, String vmUser, 
                                     PrlDevopsApiClient apiClient, AgentTemplate template) {
         super();  // Call JNLPLauncher constructor
+        boolean ws = false;
+        Jenkins jenkins = Jenkins.getInstanceOrNull();
+        if (jenkins != null) {
+            Cloud cloud = jenkins.getCloud(cloudName);
+            if (cloud instanceof PrlDevopsCloud prlCloud) {
+                ws = prlCloud.isUseWebSocket();
+            }
+            if (!ws) {
+                String rootUrl = jenkins.getRootUrl();
+                if (jenkins.getSlaveAgentPort() == -1 || (rootUrl != null && rootUrl.startsWith("https://"))) {
+                    ws = true;  // HTTPS or disabled TCP port -> auto-switch to WebSocket
+                }
+            }
+        }
+        setWebSocket(ws);
         this.cloudName = cloudName;
         this.vmId = vmId;
         this.vmUser = vmUser;
@@ -177,13 +192,10 @@ public class PrlDevopsComputerLauncher extends JNLPLauncher {
             String javaCmd = buildJavaPath();
             String jvmOpts = jvmOptions != null && !jvmOptions.isBlank() ? jvmOptions + " " : "";
             
-            // Use sh -c with proper backgrounding that works without TTY
-            // Redirect stdin from /dev/null to avoid "Inappropriate ioctl" errors from nohup
-            // Use -noCertificateCheck to allow self-signed/untrusted certificates
-            // NOTE: Removed -webSocket as production Jenkins doesn't support it (only JNLP4-connect)
+            String webSocketFlag = isWebSocket() ? "-webSocket " : "";
             String agentCmd = String.format(
-                    "sh -c '%s %s-jar /tmp/agent.jar -url \"%s\" -secret \"%s\" -name \"%s\" -workDir /tmp/jenkins -noCertificateCheck </dev/null >/tmp/agent.log 2>&1 & echo Agent_PID=$!'",
-                    javaCmd, jvmOpts, jenkinsUrl, secret, agentName);
+                    "sh -c '%s %s-jar /tmp/agent.jar -url \"%s\" -secret \"%s\" -name \"%s\" -workDir /tmp/jenkins %s-noCertificateCheck </dev/null >/tmp/agent.log 2>&1 & echo Agent_PID=$!'",
+                    javaCmd, jvmOpts, jenkinsUrl, secret, agentName, webSocketFlag);
             log.println("[PrlDevops] Agent command: " + agentCmd.replace(secret, "***SECRET***"));
             
             ExecuteResponse startResp = getApiClient().executeCommand(vmId,

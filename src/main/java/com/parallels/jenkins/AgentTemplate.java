@@ -4,6 +4,7 @@ import hudson.Extension;
 import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
 import hudson.model.Label;
+import jenkins.model.Jenkins;
 import net.sf.json.JSONObject;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
@@ -191,7 +192,7 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
     @DataBoundSetter
     public void setProvisioningConfig(ProvisioningConfig provisioningConfig) {
         this.provisioningConfig = provisioningConfig != null
-                ? provisioningConfig : new CloneProvisioningConfig("");
+                ? provisioningConfig : new CatalogProvisioningConfig("");
     }
 
     /**
@@ -216,6 +217,23 @@ public class AgentTemplate extends AbstractDescribableImpl<AgentTemplate> implem
         @Override
         public AgentTemplate newInstance(StaplerRequest2 req, JSONObject formData) throws FormException {
             return (AgentTemplate) super.newInstance(req, formData);
+        }
+
+        public Descriptor<ProvisioningConfig> getCatalogProvisioningConfigDescriptor() {
+            return Jenkins.get().getDescriptor(CatalogProvisioningConfig.class);
+        }
+
+        public java.util.List<Descriptor<ProvisioningConfig>> getApplicableProvisioningConfigs() {
+            java.util.List<Descriptor<ProvisioningConfig>> result = new java.util.ArrayList<>();
+            Descriptor<ProvisioningConfig> catalogDesc = Jenkins.get().getDescriptor(CatalogProvisioningConfig.class);
+            if (catalogDesc != null) {
+                result.add(catalogDesc);
+            }
+            Descriptor<ProvisioningConfig> cloneDesc = Jenkins.get().getDescriptor(CloneProvisioningConfig.class);
+            if (cloneDesc != null) {
+                result.add(cloneDesc);
+            }
+            return result;
         }
     }
 }

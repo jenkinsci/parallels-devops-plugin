@@ -35,6 +35,7 @@ public final class CloneProvisioningConfig extends ProvisioningConfig {
     }
 
     public String getBaseVmName() { return baseVmName; }
+    public String getCloneName() { return baseVmName; }
 
     @Override
     public boolean canProvision() {
@@ -49,6 +50,11 @@ public final class CloneProvisioningConfig extends ProvisioningConfig {
                                           Duration timeout,
                                           Duration pollInterval,
                                           ExecutorService executor) throws PrlApiException {
+        if (apiClient.getConnectionMode() == com.parallels.jenkins.api.ConnectionMode.ORCHESTRATOR) {
+            throw new PrlApiException(
+                    "Clone mode is not supported when connected in Orchestrator mode. Please use Catalog provisioning mode.");
+        }
+
         String sourceVmName = Util.fixEmptyAndTrim(baseVmName);
         if (sourceVmName == null) {
             throw new PrlApiException(
@@ -58,7 +64,7 @@ public final class CloneProvisioningConfig extends ProvisioningConfig {
         CloneRequest cloneRequest = new CloneRequest(
                 "jenkins-" + label + "-" + System.currentTimeMillis(), null);
         LOGGER.fine("[PrlDevops] Requesting clone of '" + sourceVmName + "' for label '" + label + "'");
-        CloneResponse cloneResponse = apiClient.cloneVm(sourceVmName, cloneRequest);
+        CloneResponse cloneResponse = apiClient.createVmFromClone(sourceVmName, cloneRequest);
         String vmId = cloneResponse.getId();
         LOGGER.fine("[PrlDevops] Clone requested; VM ID=" + vmId);
         return new PrlDevopsPlannedNode(

@@ -83,8 +83,10 @@ Fill in the top-level cloud fields:
 | **API Credentials** | Select or add the Jenkins credential for the Parallels DevOps API (secret text or username/password) |
 | **Connection Mode** | `HOST` — connects to a single Parallels DevOps host; `ORCHESTRATOR` — connects to an orchestrator managing a fleet |
 | **Max Concurrent Agents** | Maximum number of VMs that may be alive at once for this cloud |
+| **Use WebSocket** | Tick to connect using WebSockets |
 
-![Cloud service configuration](images/service-configurations.png)
+![Cloud service configuration (Host mode)](images/service-configurations-host.png)
+![Cloud service configuration (Orchestrator mode)](images/service-configurations-orchestrator.png)
 
 ### Step 3: Add an Agent Template
 
@@ -99,29 +101,32 @@ Scroll down to **Agent Templates** and click **Add Template**. Configure:
 | **VM Ready Timeout (s)** | Maximum seconds to wait for the VM to become usable (default: 600) |
 | **VM Ready Poll Interval (s)** | How often Jenkins checks readiness (default: 10) |
 
-![Template configuration](images/template-label.png)
-
 #### Clone existing VM
 
 Select **Clone existing VM** and supply:
 
-- **Base VM Name or VM ID**: The identifier (name or ID) of the VM to clone, as recognized by the Parallels DevOps Service (e.g., `macos-sonoma-base` or `dcc2016e-5563-4bf4-8312-1492ec8f1663`)
+- **Base VM Name or VM ID**: The identifier (name or ID) of the base VM to clone, as recognized by the Parallels DevOps host (e.g., `macos-sonoma-base` or `dcc2016e-5563-4bf4-8312-1492ec8f1663`)
 
-This is the simplest path when you manage your own golden images.
+> [!NOTE]
+> **Clone mode is supported only in `HOST` connection mode.** In `ORCHESTRATOR` mode, Clone mode is disabled because orchestrators rely on centralized catalog provisioning.
+
+![Clone-based provisioning template](images/template-clone.png)
 
 #### Create from catalog
 
 Select **Create from catalog** and supply:
 
-| Field | Example |
-|---|---|
-| **Catalog ID** | `ubuntu-22-arm64` |
-| **Catalog Version** | `latest` |
-| **Catalog URL** | `http://192.168.1.100:8080` |
-| **Architecture** | `arm64` or `x86_64` |
-| **Catalog Credentials** | Credential for catalog access (if required) |
+| Field | Supported Mode | Description / Example |
+|---|---|---|
+| **Catalog ID** | Both (`HOST` & `ORCHESTRATOR`) | Identifier of the catalog item, e.g. `JENKINS_UBUNTU_SSH` |
+| **Catalog Version** | Both (`HOST` & `ORCHESTRATOR`) | Tag or version, e.g. `latest` or `0.1` |
+| **Architecture** | Both (`HOST` & `ORCHESTRATOR`) | `arm64` or `x86_64` |
+| **Catalog Service URL** | `HOST` mode | Base URL of the remote catalog service |
+| **Catalog Credentials** | `HOST` mode | API credentials (secret text or username/password) for remote catalog access |
+| **Catalog Manager ID** | `ORCHESTRATOR` mode | Optional ID of registered Catalog Manager in Orchestrator (leave empty if Orchestrator built-in catalog is used) |
 
-![Catalog-based provisioning template](images/catalog-based.png)
+![Catalog-based provisioning template (Host mode)](images/catalog-based-host.png)
+![Catalog-based provisioning template (Orchestrator mode)](images/catalog-based-orchestrator.png)
 
 ### Step 4: Test the Configuration
 

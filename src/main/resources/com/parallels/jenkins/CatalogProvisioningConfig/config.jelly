@@ -1,20 +1,29 @@
 <?jelly escape-by-default='true'?>
 <j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:c="/lib/credentials">
+    <f:entry title="Catalog ID" field="catalogId">
+        <f:textbox placeholder="e.g. ubuntu-22.04" />
+    </f:entry>
+    <f:entry title="Catalog Version" field="catalogVersion">
+        <f:textbox default="latest" placeholder="latest" />
+    </f:entry>
     <f:entry title="Architecture" field="architecture">
         <f:select />
     </f:entry>
-    <f:entry title="Catalog ID" field="catalogId">
-        <f:textbox placeholder="e.g. TIPI_NEW" />
-    </f:entry>
-    <f:entry title="Catalog Version" field="catalogVersion">
-        <f:textbox default="latest" />
-    </f:entry>
-    <f:entry title="Catalog URL" field="catalogUrl">
-        <f:textbox placeholder="https://devops-catalog.example.com" />
-    </f:entry>
-    <f:entry title="Catalog Credentials" field="catalogCredentialsId">
-        <c:select description="API credentials for catalog access (Secret text for API key or Username with password)" />
-    </f:entry>
-    <f:validateButton title="Test Catalog Connection" method="testCatalogConnection"
-                      with="catalogUrl,catalogCredentialsId" />
+
+    <div class="prl-orch-field" style="display:none;">
+        <f:entry title="Catalog Manager ID" field="catalogManagerId">
+            <f:textbox placeholder="e.g. cat-mgr-1234" description="ID of a registered Catalog Manager in Orchestrator (optional). Leave empty to use Orchestrator built-in catalog." />
+        </f:entry>
+    </div>
+
+    <div class="prl-host-field">
+        <f:entry title="Catalog Service URL" field="catalogUrl">
+            <f:textbox placeholder="https://devops-catalog.example.com" description="URL to remote catalog service (optional)." />
+        </f:entry>
+        <f:entry title="Catalog Credentials" field="catalogCredentialsId">
+            <c:select description="API credentials for remote catalog access (optional)." />
+        </f:entry>
+        <f:validateButton title="Test Catalog Connection" method="testCatalogConnection"
+                          with="catalogUrl,catalogCredentialsId" />
+    </div>
 </j:jelly>

@@ -52,6 +52,11 @@ class PrlDevopsProvisionTest {
         }
 
         @Override
+        public com.parallels.jenkins.api.ConnectionMode getConnectionMode() {
+            return com.parallels.jenkins.api.ConnectionMode.HOST;
+        }
+
+        @Override
         public CloneResponse cloneVm(String sourceVmId, CloneRequest request) throws PrlApiException {
             CloneResponse resp = new CloneResponse();
             resp.setId(vmId);

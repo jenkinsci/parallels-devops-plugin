@@ -6,14 +6,14 @@
         </f:entry>
         <f:entry title="VM User" field="vmUser">
             <f:textbox placeholder="parallels" 
-                       description="OS user account for running bootstrap commands via execute API. Leave empty to use VM default." />
+                       description="OS user account on the target VM. Mandatory for macOS VMs (must be a valid user existing on each host)." />
         </f:entry>
         <f:entry title="Agent Workspace Directory" field="agentWorkspaceDir">
             <f:textbox default="/tmp/jenkins-agent"
                        description="Filesystem path for the Jenkins agent workspace on the VM. Override this if your image uses a different writable location." />
         </f:entry>
 
-        <f:dropdownDescriptorSelector title="Provisioning Mode" field="provisioningConfig" />
+        <f:dropdownDescriptorSelector title="Provisioning Mode" field="provisioningConfig" descriptors="${descriptor.applicableProvisioningConfigs}" />
         <f:entry title="VM Ready Timeout (s)" field="vmReadyTimeoutSeconds">
             <f:number default="600" min="30" description="How long to wait (in seconds) for the VM to boot and become ready after creation. Increase if your catalog image takes longer to download." />
         </f:entry>

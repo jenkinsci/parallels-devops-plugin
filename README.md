@@ -49,25 +49,25 @@ The plugin is designed for elastic build fleets where different jobs may need di
 - Dynamic provisioning of Jenkins agents from Parallels DevOps Service
 - Support for both `HOST` and `ORCHESTRATOR` connection modes
 - Per-template label routing so jobs can request the right image
-- Two provisioning modes (both work in HOST and ORCHESTRATOR):
-  - Clone an existing VM
-  - Create from catalog
+- Provisioning modes:
+  - **Clone an existing VM** (Supported in `HOST` connection mode)
+  - **Create from catalog** (Supported in both `HOST` and `ORCHESTRATOR` connection modes)
 - Inbound agent architecture (VMs connect TO Jenkins, works through NAT/firewalls)
 - Configurable VM readiness timeout and polling interval
 - Configurable agent bootstrap settings (Java path, JVM options, connection timeout)
 - Automatic cleanup of one-shot agents and their backing VMs
-- Configuration as Code coverage for both clone and catalog setups
+- Configuration as Code coverage for clone and catalog setups
 
 ## Getting started
 
 Before configuring the plugin in Jenkins, make sure you have:
 
-1. A reachable Parallels DevOps Service endpoint (version 1.0.5 or later required).
+1. A reachable Parallels DevOps Service endpoint (version 1.0.6 or later required).
 2. Jenkins credentials for the Parallels DevOps API.
 3. Jenkins URL configured (Manage Jenkins → System → Jenkins Location) so VMs can connect back to Jenkins.
 4. At least one VM source, either:
-     - an existing base VM registered in Parallels DevOps Service, or
-     - a Parallels catalog entry that can be used to create a VM.
+     - an existing base VM registered on a Parallels DevOps host (for `HOST` mode clone provisioning), or
+     - a Parallels catalog entry (for `HOST` or `ORCHESTRATOR` mode catalog provisioning).
 
 Jobs are routed by label, so each template should use a label that clearly maps to an operating system or workload, for example `macos`, `windows11`, or `ubuntu-arm64`.
 
@@ -85,13 +85,15 @@ After the cloud is created, configure these top-level fields:
 - `Service URL`: base URL of the Parallels DevOps Service instance
 - `API Credentials`: secret text bearer token or username/password credentials
 - `Connection Mode`:
-  - `HOST` connects directly to a single Parallels DevOps host
+  - `HOST` connects directly to a single Parallels DevOps host instance
   - `ORCHESTRATOR` connects to an orchestrator managing a fleet of hosts
 - `Max Concurrent Agents`: maximum number of VMs that may be alive at the same time for this cloud
+- `Use WebSocket`: tick to connect using WebSockets
 
 Use **Test Connection** before saving.
 
-![Cloud service configuration](docs/images/service-configurations.png)
+![Cloud service configuration (Host mode)](docs/images/service-configurations-host.png)
+![Cloud service configuration (Orchestrator mode)](docs/images/service-configurations-orchestrator.png)
 
 ### Configure a template
 
@@ -102,11 +104,9 @@ At the template level, configure:
 - `Template Label`: the Jenkins label that jobs will request
 - `VM User`: OS user account for executing bootstrap commands on the VM
 - `Agent Workspace Directory`: remote workspace path on the agent VM
-- `Provisioning Mode`: choose how the VM is created
+- `Provisioning Mode`: choose how the VM is created (`Clone existing VM` or `Create from catalog`)
 - `VM Ready Timeout (s)`: maximum time to wait for the VM to become usable
 - `VM Ready Poll Interval (s)`: how often Jenkins checks VM readiness
-
-![Template configuration](docs/images/template-label.png)
 
 Expand **Advanced** to configure:
 
@@ -114,33 +114,40 @@ Expand **Advanced** to configure:
 - `Java Path`: path to Java executable on the VM (default: `java`)
 - `JVM Options`: extra JVM flags for the agent process (e.g., `-Xmx512m`)
 
-The plugin supports two provisioning modes.
-
 #### Clone existing VM
 
-Use this mode when you already have a prepared VM and want Jenkins to clone it per build.
+Use this mode when you connect directly to a single host (`HOST` mode) and want Jenkins to clone a base VM registered on that host per build.
+
+> [!NOTE]
+> **Clone mode is supported only in `HOST` connection mode.** In `ORCHESTRATOR` mode, Clone mode is disabled in the UI because orchestrator deployments rely on centralized catalog provisioning.
 
 Required field:
 
-- `Base VM Name or VM ID` - The identifier (name or ID) of the VM to clone, as recognized by the Parallels DevOps Service
+- `Base VM Name or VM ID`: The identifier (name or ID) of the base VM to clone, as recognized by the Parallels DevOps host.
 
-This is usually the simplest path when you maintain your own golden images.
+![Clone-based provisioning template](docs/images/template-clone.png)
 
 #### Create from catalog
 
-Use this mode when your images come from a Parallels catalog. This mode works in both HOST and ORCHESTRATOR modes. [Learn more](https://parallels.github.io/prl-devops-service/docs/devops/catalog/overview/)
+Use this mode when your images come from a Parallels catalog. This mode is supported in both `HOST` and `ORCHESTRATOR` connection modes. [Learn more](https://parallels.github.io/prl-devops-service/docs/devops/catalog/overview/)
 
-Typical fields include:
+Common fields:
 
-- `Architecture`
-- `Catalog ID`
-- `Catalog Version`
-- `Catalog URL`
-- `Catalog Credentials`
+- `Catalog ID`: identifier of the catalog item (e.g., `JENKINS_UBUNTU_SSH`)
+- `Catalog Version`: tag or version of the catalog item (default: `latest`)
+- `Architecture`: target architecture (`arm64` or `x86_64`)
 
-This is ideal when you want centrally managed, versioned images.
+Mode-specific fields:
 
-![Catalog-based provisioning template](docs/images/catalog-based.png)
+- **In `HOST` connection mode**:
+  - `Catalog Service URL`: base URL of the remote catalog service
+  - `Catalog Credentials`: API credentials (secret text or username/password) required for accessing the remote catalog
+  - **Test Catalog Connection** button to validate catalog connectivity before saving
+- **In `ORCHESTRATOR` connection mode**:
+  - `Catalog Manager ID`: ID of a registered Catalog Manager in Orchestrator (optional). Leave empty if Orchestrator and Catalog are in the same service instance.
+
+![Catalog-based provisioning template (Host mode)](docs/images/catalog-based-host.png)
+![Catalog-based provisioning template (Orchestrator mode)](docs/images/catalog-based-orchestrator.png)
 
 
 ### Run jobs on provisioned agents
@@ -180,55 +187,79 @@ After provisioning succeeds, the cloud appears in Jenkins and jobs run on dynami
 
 ## Configuration as Code
 
-The plugin supports Jenkins Configuration as Code for both provisioning modes.
+The plugin supports Jenkins Configuration as Code (CasC).
 
-Example for clone mode:
+### Host Mode with Clone Provisioning
 
 ```yaml
 jenkins:
     clouds:
         - parallelsDevops:
                 name: "test-clone-cloud"
-                serviceUrl: "http://test-service.invalid:8080"
-                credentialsId: "test-credentials-id"
+                serviceUrl: "http://my-host.example.com:8080"
+                credentialsId: "host-credentials-id"
                 connectionMode: "HOST"
                 maxAgents: 5
                 templates:
-                    - templateLabel: "test-label"
-                        vmUser: "test-user"
-                        agentWorkspaceDir: "/tmp/test-workspace"
-                        numExecutors: 2
+                    - templateLabel: "macos-clone"
+                        vmUser: "parallels"
+                        agentWorkspaceDir: "/tmp/jenkins-agent"
                         vmReadyTimeoutSeconds: 300
                         vmReadyPollIntervalSeconds: 10
                         provisioningConfig:
                             clone:
-                                baseVmName: "test-base-vm"
+                                baseVmName: "base-macos-sonoma"
 ```
 
-Example for catalog mode:
+### Host Mode with Catalog Provisioning
+
+```yaml
+jenkins:
+    clouds:
+        - parallelsDevops:
+                name: "host-catalog-cloud"
+                serviceUrl: "http://my-host.example.com:8080"
+                credentialsId: "host-credentials-id"
+                connectionMode: "HOST"
+                maxAgents: 3
+                templates:
+                    - templateLabel: "ubuntu-host-catalog"
+                        vmUser: "ubuntu"
+                        agentWorkspaceDir: "/tmp/jenkins-agent"
+                        vmReadyTimeoutSeconds: 600
+                        vmReadyPollIntervalSeconds: 15
+                        provisioningConfig:
+                            catalog:
+                                catalogId: "JENKINS_UBUNTU_SSH"
+                                catalogVersion: "0.1"
+                                architecture: "arm64"
+                                catalogUrl: "https://devops-catalog.example.com"
+                                catalogCredentialsId: "catalog-credentials-id"
+```
+
+### Orchestrator Mode with Catalog Provisioning
 
 ```yaml
 jenkins:
     clouds:
         - parallelsDevops:
                 name: "test-catalog-cloud"
-                serviceUrl: "http://test-orchestrator.invalid:8080"
-                credentialsId: "test-credentials-id"
+                serviceUrl: "https://devops-orchestrator.example.com"
+                credentialsId: "orchestrator-credentials-id"
                 connectionMode: "ORCHESTRATOR"
-                maxAgents: 3
+                maxAgents: 10
                 templates:
-                    - templateLabel: "test-label"
-                        vmUser: "test-user"
-                        agentWorkspaceDir: "/tmp/test-workspace"
-                        numExecutors: 1
+                    - templateLabel: "ubuntu-orch-catalog"
+                        vmUser: "parallels"
+                        agentWorkspaceDir: "/tmp/jenkins-agent"
                         vmReadyTimeoutSeconds: 600
                         vmReadyPollIntervalSeconds: 15
                         provisioningConfig:
                             catalog:
-                                catalogId: "test-catalog-id"
-                                catalogUrl: "http://test-catalog.invalid"
-                                architecture: "x86_64"
+                                catalogId: "JENKINS_UBUNTU_SSH"
                                 catalogVersion: "latest"
+                                architecture: "arm64"
+                                catalogManagerId: "cat-mgr-1234" # Optional: leave empty if Orchestrator built-in catalog is used
 ```
 
 ## Behavior and troubleshooting
